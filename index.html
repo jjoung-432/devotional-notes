@@ -1,0 +1,1094 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="묵상노트">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#005adc">
+<link rel="manifest" href="manifest.json">
+<title>묵상노트</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+
+<!-- Twemoji -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/twemoji.min.js"></script>
+
+<!-- Firebase SDKs -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+
+<style>
+:root {
+  --purple: #005adc;
+  --purple-light: #e8f0fd;
+  --purple-mid: #99bbf5;
+  --purple-dark: #0047b3;
+  --teal: #1D9E75;
+  --teal-light: #E1F5EE;
+  --bg: #F7F6FF;
+  --card: #FFFFFF;
+  --text: #1a1a2e;
+  --text2: #6b6b8a;
+  --border: rgba(0,90,220,0.15);
+  --radius: 16px;
+  --radius-sm: 10px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; overflow: hidden; }
+body {
+  font-family: 'Noto Sans KR', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  overflow: hidden;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── LOGIN SCREEN ── */
+#login-screen {
+  position: fixed; inset: 0; z-index: 1000;
+  background: linear-gradient(160deg, #005adc 0%, #0047b3 60%, #003080 100%);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 40px 32px;
+}
+.login-logo { font-size: 64px; margin-bottom: 16px; }
+.login-title { color: white; font-size: 28px; font-weight: 700; margin-bottom: 8px; letter-spacing: -0.5px; }
+.login-sub { color: rgba(255,255,255,0.7); font-size: 14px; text-align: center; line-height: 1.6; margin-bottom: 60px; }
+.btn-google {
+  display: flex; align-items: center; gap: 12px;
+  background: white; color: #0047b3;
+  border: none; border-radius: 14px;
+  padding: 16px 28px; font-size: 16px; font-weight: 700;
+  cursor: pointer; width: 100%; max-width: 320px;
+  justify-content: center; font-family: inherit;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.2);
+  transition: transform .15s, box-shadow .15s;
+}
+.btn-google:active { transform: scale(0.97); box-shadow: 0 2px 12px rgba(0,0,0,0.15); }
+.btn-google img { width: 24px; height: 24px; }
+.login-footer { color: rgba(255,255,255,0.4); font-size: 11px; margin-top: 40px; text-align: center; }
+
+/* ── LOADING ── */
+#loading-screen {
+  position: fixed; inset: 0; z-index: 999;
+  background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  flex-direction: column; gap: 16px;
+}
+.spinner {
+  width: 36px; height: 36px;
+  border: 3px solid var(--purple-light);
+  border-top-color: var(--purple);
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── HEADER ── */
+.hdr {
+  background: var(--card);
+  padding: 12px 16px 10px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  display: flex; align-items: center; gap: 12px;
+}
+.hdr-info { flex: 1; min-width: 0; }
+.hdr h1 { font-size: 17px; font-weight: 700; color: var(--purple); letter-spacing: -0.3px; }
+.hdr .dt { font-size: 11px; color: var(--text2); margin-top: 1px; }
+.hdr-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.icon-btn {
+  background: none; border: none; cursor: pointer;
+  width: 34px; height: 34px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; color: var(--text2);
+  transition: background .15s;
+}
+.icon-btn:active { background: var(--purple-light); }
+.user-pill {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--purple-light); border-radius: 20px;
+  padding: 4px 10px 4px 4px; cursor: pointer;
+  border: none; font-family: inherit;
+}
+.user-pill img {
+  width: 26px; height: 26px; border-radius: 50%;
+  object-fit: cover; border: 2px solid var(--purple-mid);
+}
+.user-pill .uname { font-size: 12px; font-weight: 600; color: var(--purple); max-width: 70px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user-pill .avatar-placeholder {
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--purple); color: white;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700;
+}
+
+/* ── USER MENU ── */
+#user-menu {
+  position: fixed; top: 62px; right: 16px; z-index: 500;
+  background: var(--card); border-radius: var(--radius);
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 32px rgba(0,90,220,0.15);
+  padding: 8px;
+  display: none; min-width: 180px;
+}
+#user-menu.open { display: block; }
+.menu-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: var(--radius-sm);
+  cursor: pointer; font-size: 13px; color: var(--text);
+  border: none; background: none; width: 100%; font-family: inherit;
+  text-align: left;
+}
+.menu-item:active { background: var(--purple-light); }
+.menu-item .mi-icon { font-size: 16px; }
+
+
+/* ── SCROLL AREA ── */
+.scroll-wrap {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+.page { display: none; padding: 16px 16px 24px; }
+.page.on { display: block; }
+
+/* ── BOTTOM TABS ── */
+.tabs {
+  display: flex;
+  background: var(--card);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.tab {
+  flex: 1; padding: 10px 4px 8px;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  background: none; border: none; cursor: pointer;
+  font-size: 10px; color: var(--text2);
+  transition: color .2s;
+}
+.tab svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.tab.on { color: var(--purple); }
+
+/* ── CARDS ── */
+.card {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+  border: 1px solid var(--border);
+  box-shadow: 0 2px 12px rgba(0,90,220,0.06);
+}
+.sec-lbl {
+  font-size: 10px; font-weight: 700; color: var(--purple);
+  text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px;
+}
+.sep { font-size: 11px; font-weight: 700; color: var(--purple); border-bottom: 1px solid var(--purple-light); padding-bottom: 6px; margin: 14px 0 10px; }
+
+/* ── VERSE CARD ── */
+.verse-wrap {
+  background: linear-gradient(135deg, #e8f0fd 0%, #d4e6ff 100%);
+  border-radius: var(--radius);
+  padding: 20px 18px;
+  margin-bottom: 12px;
+  border: 1px solid var(--purple-mid);
+  position: relative;
+  overflow: hidden;
+}
+.verse-wrap::before {
+  content: '\201C';
+  position: absolute; top: -10px; left: 12px;
+  font-size: 80px; color: rgba(153,187,245,0.5);
+  font-family: 'Noto Serif KR', serif; line-height: 1;
+}
+.verse-text {
+  font-family: 'Noto Serif KR', serif;
+  font-size: 15px; color: #0047b3; line-height: 1.8;
+  padding-top: 16px; position: relative;
+}
+.verse-ref { font-size: 12px; color: var(--purple); margin-top: 10px; font-weight: 700; }
+.verse-theme {
+  display: inline-block; margin-top: 6px;
+  font-size: 10px; background: rgba(0,90,220,0.12);
+  color: var(--purple); padding: 3px 10px; border-radius: 20px;
+}
+
+/* ── BUTTONS ── */
+.btn-purple {
+  width: 100%; padding: 13px;
+  background: var(--purple); color: white;
+  border: none; border-radius: var(--radius-sm);
+  font-size: 14px; font-weight: 700; cursor: pointer;
+  font-family: inherit; margin-top: 10px;
+  transition: background .15s;
+}
+.btn-purple:active { background: var(--purple-dark); }
+.btn-outline {
+  width: 100%; padding: 11px;
+  background: var(--purple-light); color: var(--purple);
+  border: 1px solid var(--purple-mid);
+  border-radius: var(--radius-sm);
+  font-size: 13px; font-weight: 500; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+  font-family: inherit; margin-top: 8px;
+  transition: background .15s;
+}
+.btn-outline:active { background: #c0d8ff; }
+
+/* ── FORM ELEMENTS ── */
+textarea, input[type=text] {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: 13px; line-height: 1.6;
+  color: var(--text);
+  background: var(--bg);
+  font-family: inherit;
+}
+textarea { resize: none; min-height: 64px; }
+textarea:focus, input[type=text]:focus { outline: none; border-color: var(--purple); }
+.field-lbl { font-size: 11px; color: var(--text2); margin-bottom: 5px; margin-top: 12px; font-weight: 500; }
+.field-lbl:first-child { margin-top: 0; }
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+/* ── EMOTION CHIPS ── */
+.em-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 7px; margin-bottom: 10px; }
+.em-chip {
+  padding: 9px 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg); cursor: pointer;
+  text-align: center; transition: all .15s;
+}
+.em-chip .e { font-size: 20px; display: block; }
+img.emoji { width: 40px; height: 40px; vertical-align: middle; }
+.em-chip .n { font-size: 10px; color: var(--text2); display: block; margin-top: 2px; }
+.em-chip.on { border-color: var(--purple); background: var(--purple-light); }
+.em-chip.on .n { color: var(--purple); }
+
+/* ── SLIDER ── */
+.score-row { display: flex; align-items: center; gap: 10px; }
+.score-row input[type=range] { flex: 1; accent-color: var(--purple); }
+.score-val { font-size: 13px; font-weight: 700; color: var(--purple); min-width: 28px; text-align: right; }
+
+/* ── CONDITION BUTTONS ── */
+.cond-btns { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.cond-btn {
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--bg); font-size: 12px;
+  color: var(--text2); cursor: pointer;
+  transition: all .15s;
+  font-family: inherit;
+}
+.cond-btn.on { background: var(--purple-light); color: var(--purple); border-color: var(--purple-mid); }
+
+/* ── PRAYER ITEMS ── */
+.prayer-cat-label { font-size: 10px; font-weight: 700; color: var(--text2); padding: 8px 0 4px; text-transform: uppercase; letter-spacing: .5px; }
+.prayer-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.prayer-item:last-child { border-bottom: none; }
+.pcheck {
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 2px solid var(--purple-mid);
+  cursor: pointer; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  margin-top: 1px; background: none;
+  transition: all .2s; font-size: 11px; color: transparent;
+}
+.pcheck.answered { background: var(--teal); border-color: var(--teal); color: white; }
+.pcheck.praying { background: var(--purple); border-color: var(--purple); color: white; }
+.prayer-body { flex: 1; min-width: 0; }
+.prayer-txt { font-size: 13px; line-height: 1.5; color: var(--text); }
+.prayer-txt.done { text-decoration: line-through; color: var(--text2); }
+.prayer-meta { display: flex; gap: 5px; margin-top: 4px; flex-wrap: wrap; align-items: center; }
+.badge { font-size: 10px; padding: 2px 8px; border-radius: 20px; }
+.badge-purple { background: var(--purple-light); color: var(--purple); }
+.badge-teal { background: var(--teal-light); color: var(--teal); }
+.badge-pink { background: #FBEAF0; color: #72243E; }
+.badge-blue { background: #E6F1FB; color: #0C447C; }
+.badge-amber { background: #FAEEDA; color: #633806; }
+.badge-gray { background: #F1EFE8; color: #444441; }
+.pdel { background: none; border: none; color: var(--text2); cursor: pointer; font-size: 18px; padding: 2px; flex-shrink: 0; line-height: 1; }
+.add-row { display: flex; gap: 6px; margin-top: 10px; }
+.add-row input { flex: 1; }
+.add-row select {
+  padding: 9px 6px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  font-size: 12px; background: var(--bg); color: var(--text);
+  font-family: inherit;
+}
+.add-row button {
+  width: 40px; height: 40px; flex-shrink: 0;
+  background: var(--purple); color: white;
+  border: none; border-radius: var(--radius-sm);
+  font-size: 22px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+
+
+/* ── STATS ── */
+.stat-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; margin-bottom: 16px; }
+.stat-box { background: var(--card); border-radius: var(--radius-sm); padding: 12px 6px; text-align: center; border: 1px solid var(--border); }
+.stat-n { font-size: 22px; font-weight: 700; color: var(--purple); }
+.stat-l { font-size: 9px; color: var(--text2); margin-top: 2px; }
+
+/* ── HISTORY ITEMS ── */
+.hist-item {
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+}
+.hist-item:last-child { border-bottom: none; }
+.hist-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 13px 0; cursor: pointer;
+  user-select: none;
+}
+.hist-header:active { opacity: .7; }
+.hist-emo-big { font-size: 22px; flex-shrink: 0; }
+.hist-summary { flex: 1; min-width: 0; }
+.hist-date { font-size: 10px; color: var(--text2); margin-bottom: 2px; }
+.hist-cond-badge {
+  display: inline-block; font-size: 10px;
+  background: var(--purple-light); color: var(--purple);
+  padding: 1px 7px; border-radius: 10px; margin-bottom: 3px;
+}
+.hist-prev { font-size: 12px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hist-chevron {
+  font-size: 14px; color: var(--text2); flex-shrink: 0;
+  transition: transform .2s;
+}
+.hist-item.expanded .hist-chevron { transform: rotate(180deg); }
+
+/* ── HISTORY DETAIL ── */
+.hist-detail {
+  display: none;
+  padding: 0 0 14px;
+  animation: fadeIn .2s ease;
+}
+.hist-item.expanded .hist-detail { display: block; }
+@keyframes fadeIn { from { opacity:0; transform:translateY(-4px) } to { opacity:1; transform:none } }
+.detail-section { margin-bottom: 12px; }
+.detail-section-title {
+  font-size: 10px; font-weight: 700; color: var(--purple);
+  text-transform: uppercase; letter-spacing: .5px;
+  margin-bottom: 6px; padding-bottom: 4px;
+  border-bottom: 1px solid var(--purple-light);
+}
+.detail-row { display: flex; gap: 6px; margin-bottom: 5px; flex-wrap: wrap; align-items: baseline; }
+.detail-key { font-size: 11px; color: var(--text2); font-weight: 500; flex-shrink: 0; min-width: 80px; }
+.detail-val { font-size: 12px; color: var(--text); line-height: 1.6; flex: 1; white-space: pre-wrap; }
+.detail-em-row { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+.detail-em-chip {
+  font-size: 11px; padding: 3px 8px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--bg); color: var(--text);
+}
+.detail-em-chip.pos { background: #e8f0fd; border-color: var(--purple-mid); color: var(--purple); }
+.detail-em-chip.neg { background: #FEF0EE; border-color: #F0B0A8; color: #8B2020; }
+.detail-score { font-size: 11px; color: var(--text2); }
+.thanks-item { font-size: 12px; color: var(--text); margin-bottom: 3px; padding-left: 12px; position: relative; }
+.thanks-item::before { content: '•'; position: absolute; left: 0; color: var(--purple); }
+
+/* ── INSTALL BANNER ── */
+.install-banner {
+  background: linear-gradient(135deg, var(--purple), var(--purple-dark));
+  color: white; padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 12px;
+  display: flex; align-items: center; gap: 10px;
+  font-size: 12px; line-height: 1.5;
+}
+.install-banner strong { display: block; font-size: 13px; margin-bottom: 2px; }
+.install-x { background: rgba(255,255,255,.2); border: none; color: white; border-radius: 50%; width: 24px; height: 24px; font-size: 14px; cursor: pointer; flex-shrink: 0; margin-left: auto; }
+
+/* overlay backdrop */
+.backdrop {
+  position: fixed; inset: 0; z-index: 590;
+  display: none;
+}
+.backdrop.open { display: block; }
+</style>
+</head>
+<body>
+
+<!-- ── LOADING ── -->
+<div id="loading-screen">
+  <div class="spinner"></div>
+  <div style="font-size:13px;color:var(--text2)">잠시만요...</div>
+</div>
+
+<!-- ── LOGIN SCREEN ── -->
+<div id="login-screen" style="display:none">
+  <div class="login-logo">🙏</div>
+  <div class="login-title">나의 묵상노트</div>
+  <div class="login-sub">말씀 묵상, 감정일기, 기도제목을<br>한 곳에서 기록해요</div>
+  <button class="btn-google" onclick="signInWithGoogle()">
+    <svg width="24" height="24" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+    Google로 로그인
+  </button>
+  <div class="login-footer">로그인하면 모든 기기에서<br>내 기록을 이어볼 수 있어요</div>
+</div>
+
+<!-- ── MAIN APP ── -->
+<div id="app" style="display:none;height:100dvh;display:none;flex-direction:column">
+
+<div class="hdr">
+  <div class="hdr-info">
+    <h1>🙏 나의 묵상노트</h1>
+    <div class="dt" id="today-dt"></div>
+  </div>
+  <div class="hdr-right">
+<button class="user-pill" id="user-pill" onclick="toggleUserMenu()">
+      <div class="avatar-placeholder" id="avatar-placeholder">?</div>
+      <img id="user-avatar" src="" alt="" style="display:none;width:26px;height:26px;border-radius:50%;object-fit:cover;border:2px solid var(--purple-mid)">
+      <span class="uname" id="user-name-short">사용자</span>
+    </button>
+  </div>
+</div>
+
+<!-- User menu dropdown -->
+<div class="backdrop" id="menu-backdrop" onclick="closeUserMenu()"></div>
+<div id="user-menu">
+  <div style="padding:10px 12px 8px;border-bottom:1px solid var(--border);margin-bottom:4px">
+    <div style="font-size:13px;font-weight:700;color:var(--text)" id="menu-full-name"></div>
+    <div style="font-size:11px;color:var(--text2);margin-top:2px" id="menu-email"></div>
+  </div>
+  <button class="menu-item" onclick="signOut()"><span class="mi-icon">👋</span> 로그아웃</button>
+</div>
+
+<div class="scroll-wrap" id="scroll-wrap">
+
+  <!-- 말씀 -->
+  <div class="page on" id="pg-word">
+    <div id="install-banner" class="install-banner" style="display:none">
+      <div>
+        <strong>홈 화면에 추가하기</strong>
+        Safari → 공유버튼 → "홈 화면에 추가" 탭하면 앱처럼 사용 가능해요!
+      </div>
+      <button class="install-x" onclick="document.getElementById('install-banner').style.display='none'">✕</button>
+    </div>
+    <div class="verse-wrap">
+      <div class="verse-text" id="vt">말씀을 불러오는 중...</div>
+      <div class="verse-ref" id="vr"></div>
+      <div class="verse-theme" id="vth"></div>
+    </div>
+    <button class="btn-outline" onclick="nextVerse()">🔄 다른 말씀 받기</button>
+  </div>
+
+  <!-- 감정일기 -->
+  <div class="page" id="pg-diary">
+    <div class="card">
+      <div class="sec-lbl">마음 컨디션</div>
+      <div class="cond-btns" id="cond-btns">
+        <button class="cond-btn" onclick="selCond(this,'매우 좋음')">😄 매우 좋음</button>
+        <button class="cond-btn" onclick="selCond(this,'좋음')">🙂 좋음</button>
+        <button class="cond-btn" onclick="selCond(this,'보통')">😐 보통</button>
+        <button class="cond-btn" onclick="selCond(this,'조금 힘듦')">😔 조금 힘듦</button>
+        <button class="cond-btn" onclick="selCond(this,'많이 힘듦')">😞 많이 힘듦</button>
+      </div>
+
+      <div class="sep">✅ 긍정 감정</div>
+      <div class="em-grid">
+        <div class="em-chip" onclick="selEm(this,'pos','감사')"><img src="https://cdn.jsdelivr.net/npm/openmoji@14.0.0/color/svg/1F64F.svg" width="40" height="40" style="display:block;margin:0 auto 3px" onerror="this.replaceWith('🙏')"><span class="n">감사</span></div>
+        <div class="em-chip" onclick="selEm(this,'pos','기쁨')"><img src="https://cdn.jsdelivr.net/npm/openmoji@14.0.0/color/svg/1F60A.svg" width="40" height="40" style="display:block;margin:0 auto 3px" onerror="this.replaceWith('😊')"><span class="n">기쁨</span></div>
+        <div class="em-chip" onclick="selEm(this,'pos','평안')"><img src="https://cdn.jsdelivr.net/npm/openmoji@14.0.0/color/svg/1F60C.svg" width="40" height="40" style="display:block;margin:0 auto 3px" onerror="this.replaceWith('😌')"><span class="n">평안</span></div>
+        <div class="em-chip" onclick="selEm(this,'pos','설렘')"><img src="https://cdn.jsdelivr.net/npm/openmoji@14.0.0/color/svg/2728.svg" width="40" height="40" style="display:block;margin:0 auto 3px" onerror="this.replaceWith('✨')"><span class="n">설렘</span></div>
+        <div class="em-chip" onclick="selEm(this,'pos','용기')"><img src="https://cdn.jsdelivr.net/npm/openmoji@14.0.0/color/svg/1F4AA.svg" width="40" height="40" style="display:block;margin:0 auto 3px" onerror="this.replaceWith('💪')"><span class="n">용기</span></div>
+        <div class="em-chip" onclick="selEm(this,'pos','사랑')"><img src="https://cdn.jsdelivr.net/npm/openmoji@14.0.0/color/svg/2764.svg" width="40" height="40" style="display:block;margin:0 auto 3px" onerror="this.replaceWith('❤️')"><span class="n">사랑</span></div>
+        <div class="em-chip" onclick="selEm(this,'pos','희망')"><img src="https://cdn.jsdelivr.net/npm/openmoji@14.0.0/color/svg/1F31F.svg" width="40" height="40" style="display:block;margin:0 auto 3px" onerror="this.replaceWith('🌟')"><span class="n">희망</span></div>
+        <div class="em-chip" onclick="selEm(this,'pos','만족')"><img src="https://cdn.jsdelivr.net/npm/openmoji@14.0.0/color/svg/1F607.svg" width="40" height="40" style="display:block;margin:0 auto 3px" onerror="this.replaceWith('😇')"><span class="n">만족</span></div>
+      </div>
+      <div class="field-lbl">긍정 기분 점수</div>
+      <div class="score-row">
+        <input type="range" min="0" max="10" value="5" step="1" id="pos-score" oninput="document.getElementById('pos-sv').textContent=this.value">
+        <span class="score-val" id="pos-sv">5</span>
+      </div>
+      <div class="field-lbl">긍정 기분의 이유</div>
+      <textarea id="pos-reason" placeholder="오늘 어떤 일이 기분을 좋게 했나요?"></textarea>
+
+      <div class="sep">💙 부정 감정</div>
+      <div class="em-grid">
+        <div class="em-chip" onclick="selEm(this,'neg','슬픔')"><img src="https://cdn.jsdelivr.net/npm/openmoji@14.0.0/color/svg/1F622.svg" width="40" height="40" style="display:block;margin:0 auto 3px" onerror="this.replaceWith('😢')"><span class="n">슬픔</span></div>
+        <div class="em-chip" onclick="selEm(this,'neg','불안')"><img src="https://cdn.jsdelivr.net/npm/openmoji@14.0.0/color/svg/1F630.svg" width="40" height="40" style="display:block;margin:0 auto 3px" onerror="this.replaceWith('😰')"><span class="n">불안</span></div>
+        <div class="em-chip" onclick="selEm(this,'neg','지침')"><img src="https://cdn.jsdelivr.net/npm/openmoji@14.0.0/color/svg/1F629.svg" width="40" height="40" style="display:block;margin:0 auto 3px" onerror="this.replaceWith('😩')"><span class="n">지침</span></div>
+        <div class="em-chip" onclick="selEm(this,'neg','화남')"><img src="https://cdn.jsdelivr.net/npm/openmoji@14.0.0/color/svg/1F620.svg" width="40" height="40" style="display:block;margin:0 auto 3px" onerror="this.replaceWith('😠')"><span class="n">화남</span></div>
+        <div class="em-chip" onclick="selEm(this,'neg','외로움')"><img src="https://cdn.jsdelivr.net/npm/openmoji@14.0.0/color/svg/1F97A.svg" width="40" height="40" style="display:block;margin:0 auto 3px" onerror="this.replaceWith('🥺')"><span class="n">외로움</span></div>
+        <div class="em-chip" onclick="selEm(this,'neg','혼란')"><img src="https://cdn.jsdelivr.net/npm/openmoji@14.0.0/color/svg/1F635.svg" width="40" height="40" style="display:block;margin:0 auto 3px" onerror="this.replaceWith('😵')"><span class="n">혼란</span></div>
+        <div class="em-chip" onclick="selEm(this,'neg','두려움')"><img src="https://cdn.jsdelivr.net/npm/openmoji@14.0.0/color/svg/1F631.svg" width="40" height="40" style="display:block;margin:0 auto 3px" onerror="this.replaceWith('😱')"><span class="n">두려움</span></div>
+        <div class="em-chip" onclick="selEm(this,'neg','실망')"><img src="https://cdn.jsdelivr.net/npm/openmoji@14.0.0/color/svg/1F613.svg" width="40" height="40" style="display:block;margin:0 auto 3px" onerror="this.replaceWith('😓')"><span class="n">실망</span></div>
+      </div>
+      <div class="field-lbl">부정 기분 점수</div>
+      <div class="score-row">
+        <input type="range" min="0" max="10" value="3" step="1" id="neg-score" oninput="document.getElementById('neg-sv').textContent=this.value">
+        <span class="score-val" id="neg-sv">3</span>
+      </div>
+      <div class="field-lbl">부정 기분의 이유</div>
+      <textarea id="neg-reason" placeholder="오늘 어떤 일이 힘들거나 어려웠나요?"></textarea>
+    </div>
+
+    <div class="card">
+      <div class="sec-lbl">오늘 하루 돌아보기</div>
+      <div class="two-col">
+        <div>
+          <div class="field-lbl">오늘 고마운 사람</div>
+          <input type="text" id="grateful-person" placeholder="이름 또는 관계">
+          <div class="field-lbl">고마운 이유</div>
+          <textarea id="grateful-reason" placeholder="어떤 점이 고마웠나요?" style="min-height:52px"></textarea>
+        </div>
+        <div>
+          <div class="field-lbl">오늘의 힐링</div>
+          <textarea id="healing" placeholder="나를 위로해준 것" style="min-height:84px"></textarea>
+        </div>
+      </div>
+      <div class="field-lbl">오늘 가장 하고 싶었던 일</div>
+      <textarea id="wish" placeholder="이루었나요? 못했다면 이유도..."></textarea>
+      <div class="field-lbl">오늘 감사한 일 3가지</div>
+      <textarea id="thanks3" placeholder="1. &#10;2. &#10;3. " style="min-height:82px"></textarea>
+      <div class="field-lbl">나에게 해줄 칭찬 🌸</div>
+      <textarea id="praise" placeholder="오늘 나는 정말 잘 했어요..."></textarea>
+      <div class="field-lbl">오늘 아쉬웠던 점</div>
+      <textarea id="regret" placeholder="내일은 어떻게 달리 해볼까요?"></textarea>
+    </div>
+
+    <button class="btn-purple" onclick="saveDiary()">💾 일기 저장하기</button>
+  </div>
+
+  <!-- 기도제목 -->
+  <div class="page" id="pg-prayer">
+    <div class="card">
+      <div class="sec-lbl">나의 기도제목</div>
+      <div id="prayer-list"><div style="color:var(--text2);font-size:13px;padding:8px 0;text-align:center">기도제목을 추가해보세요 🙏</div></div>
+      <div class="add-row">
+        <input type="text" id="p-input" placeholder="기도제목 입력" onkeydown="if(event.key==='Enter')addPrayer()">
+        <select id="p-cat">
+          <option value="개인">🙏 개인</option>
+          <option value="가족">👨‍👩‍👧 가족</option>
+          <option value="친구">👫 친구</option>
+          <option value="교회">⛪ 교회</option>
+          <option value="나라">🇰🇷 나라</option>
+          <option value="감사">✨ 감사</option>
+          <option value="치유">💊 치유</option>
+          <option value="기타">📌 기타</option>
+        </select>
+        <button onclick="addPrayer()">+</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 기록 -->
+  <div class="page" id="pg-hist">
+    <div class="stat-row">
+      <div class="stat-box"><div class="stat-n" id="s-days">0</div><div class="stat-l">기록일수</div></div>
+      <div class="stat-box"><div class="stat-n" id="s-prayers">0</div><div class="stat-l">기도제목</div></div>
+      <div class="stat-box"><div class="stat-n" id="s-ans">0</div><div class="stat-l">응답받음</div></div>
+      <div class="stat-box"><div class="stat-n" id="s-praying">0</div><div class="stat-l">기도중</div></div>
+    </div>
+    <div class="sec-lbl">지난 기록 <span style="font-weight:400;color:var(--text2);text-transform:none;letter-spacing:0">— 항목을 탭하면 자세히 볼 수 있어요</span></div>
+    <div class="card" id="hist-list"></div>
+  </div>
+
+</div><!-- /scroll-wrap -->
+
+<div class="tabs">
+  <button class="tab on" onclick="go('word')" id="tab-word">
+    <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+    말씀
+  </button>
+  <button class="tab" onclick="go('diary')" id="tab-diary">
+    <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+    일기
+  </button>
+  <button class="tab" onclick="go('prayer')" id="tab-prayer">
+    <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+    기도
+  </button>
+  <button class="tab" onclick="go('hist')" id="tab-hist">
+    <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+    기록
+  </button>
+</div>
+
+</div><!-- /app -->
+
+
+<script>
+// ══════════════════════════════════════════════
+// TODO: 아래 Firebase 설정값을 채워주세요
+// Firebase 콘솔(https://console.firebase.google.com)에서
+// 프로젝트 설정 > 일반 > 내 앱 > SDK 설정 및 구성에서 복사하세요
+// ══════════════════════════════════════════════
+const firebaseConfig = {
+  apiKey:            "AIzaSyC1i14coUMvk4pjMfkVpj5ZnUlNJ1P7KCU",
+  authDomain:        "note-90230.firebaseapp.com",
+  projectId:         "note-90230",
+  storageBucket:     "note-90230.firebasestorage.app",
+  messagingSenderId: "352978067466",
+  appId:             "1:352978067466:web:4eb99511d41c2a8ff47ff3"
+};
+// ══════════════════════════════════════════════
+
+// ── Firebase 초기화 ──
+let auth, db;
+let currentUser = null;
+const firebaseReady = (function(){
+  try {
+    firebase.initializeApp(firebaseConfig);
+    auth = firebase.auth();
+    db   = firebase.firestore();
+    db.enablePersistence({ synchronizeTabs: true }).catch(()=>{});
+    return true;
+  } catch(e) {
+    console.warn('Firebase not configured:', e.message);
+    return false;
+  }
+})();
+
+// ── 성경 말씀 ──
+const VERSES=[
+  {t:"여호와는 나의 목자시니 내게 부족함이 없으리로다.",r:"시편 23:1",th:"인도하심"},
+  {t:"두려워 말라 내가 너와 함께 함이니라 놀라지 말라 나는 네 하나님이 됨이니라 내가 너를 굳세게 하리라 참으로 너를 도와 주리라 참으로 나의 의로운 오른손으로 너를 붙들리라.",r:"이사야 41:10",th:"힘과 용기"},
+  {t:"범사에 감사하라 이것이 그리스도 예수 안에서 너희를 향하신 하나님의 뜻이니라.",r:"데살로니가전서 5:18",th:"감사"},
+  {t:"수고하고 무거운 짐 진 자들아 다 내게로 오라 내가 너희를 쉬게 하리라.",r:"마태복음 11:28",th:"안식"},
+  {t:"아무것도 염려하지 말고 오직 모든 일에 기도와 간구로 너희 구할 것을 감사함으로 하나님께 아뢰라 그리하면 모든 지각에 뛰어난 하나님의 평강이 그리스도 예수 안에서 너희 마음과 생각을 지키시리라.",r:"빌립보서 4:6-7",th:"평안"},
+  {t:"하나님이 세상을 이처럼 사랑하사 독생자를 주셨으니 이는 저를 믿는 자마다 멸망치 않고 영생을 얻게 하려 하심이니라.",r:"요한복음 3:16",th:"구원"},
+  {t:"여호와를 기뻐하라 저가 네 마음의 소원을 이루어 주시리로다.",r:"시편 37:4",th:"소원"},
+  {t:"내가 사망의 음침한 골짜기로 다닐지라도 해를 두려워하지 않을 것은 주께서 나와 함께 하심이라.",r:"시편 23:4",th:"동행"},
+  {t:"너희 중에 누구든지 지혜가 부족하거든 모든 사람에게 후히 주시고 꾸짖지 아니하시는 하나님께 구하라 그리하면 주시리라.",r:"야고보서 1:5",th:"지혜"},
+  {t:"내게 능력 주시는 자 안에서 내가 모든 것을 할 수 있느니라.",r:"빌립보서 4:13",th:"능력"},
+  {t:"오직 여호와를 앙망하는 자는 새 힘을 얻으리니 독수리의 날개치며 올라감 같을 것이요 달음박질하여도 곤비치 아니하겠고 걸어가도 피곤치 아니하리로다.",r:"이사야 40:31",th:"소망"},
+  {t:"사람이 마음으로 자기의 길을 계획할지라도 그 걸음을 인도하는 자는 여호와시니라.",r:"잠언 16:9",th:"인도"},
+  {t:"믿음은 바라는 것들의 실상이요 보지 못하는 것들의 증거니.",r:"히브리서 11:1",th:"믿음"},
+  {t:"여호와께서 너를 지키시고 여호와께서 네 오른편에서 네 그늘이 되시나니",r:"시편 121:5",th:"보호"},
+  {t:"그런즉 믿음 소망 사랑 이 세 가지는 항상 있을 것인데 그 중에 제일은 사랑이라.",r:"고린도전서 13:13",th:"사랑"},
+  {t:"나의 하나님이 그리스도 예수 안에서 영광 가운데 그 풍성한 대로 너희 모든 쓸 것을 채우시리라.",r:"빌립보서 4:19",th:"공급"},
+  {t:"너는 마음을 다하여 여호와를 의뢰하고 네 명철을 의지하지 말라 너는 범사에 그를 인정하라 그리하면 네 길을 지도하시리라.",r:"잠언 3:5-6",th:"신뢰"},
+  {t:"내가 산을 향하여 눈을 들리라 나의 도움이 어디서 올꼬 나의 도움이 천지를 지으신 여호와에게서로다.",r:"시편 121:1-2",th:"도움"},
+  {t:"그런즉 누구든지 그리스도 안에 있으면 새로운 피조물이라 이전 것은 지나갔으니 보라 새것이 되었도다.",r:"고린도후서 5:17",th:"새출발"},
+  {t:"내가 온 것은 양으로 생명을 얻게 하고 더 풍성히 얻게 하려는 것이라.",r:"요한복음 10:10",th:"풍성한 삶"},
+];
+
+// ── 앱 상태 ──
+let vi = 0;
+let selPosArr = [], selNegArr = [], condVal = '';
+let prayers = [], history = [];
+
+// ── 로컬 fallback 스토리지 ──
+const LS = {
+  get(k){ try{ return JSON.parse(localStorage.getItem(k)||'null') }catch(e){ return null } },
+  set(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)) }catch(e){} }
+};
+
+// ── Firestore 헬퍼 ──
+function uid(){ return currentUser && currentUser.uid; }
+
+async function fsGetDiaries(){
+  if(!firebaseReady || !uid()) return LS.get('pj2_history')||[];
+  try{
+    const snap = await db.collection('users').doc(uid()).collection('diaries')
+      .orderBy('timestamp','desc').limit(60).get();
+    return snap.docs.map(d=>d.data());
+  }catch(e){ return LS.get('pj2_history')||[]; }
+}
+
+async function fsSaveDiary(entry){
+  if(!firebaseReady || !uid()){
+    history.unshift(entry);
+    LS.set('pj2_history', history);
+    return;
+  }
+  try{
+    entry.timestamp = firebase.firestore.FieldValue.serverTimestamp();
+    await db.collection('users').doc(uid()).collection('diaries').doc(entry.dateKey).set(entry);
+    // 로컬 캐시 갱신
+    const idx = history.findIndex(h=>h.dateKey===entry.dateKey);
+    if(idx>=0) history[idx]=entry; else history.unshift(entry);
+  }catch(e){
+    history.unshift(entry);
+    LS.set('pj2_history', history);
+  }
+}
+
+async function fsGetPrayers(){
+  if(!firebaseReady || !uid()) return LS.get('pj2_prayers')||[];
+  try{
+    const snap = await db.collection('users').doc(uid()).collection('prayers').get();
+    return snap.docs.map(d=>d.data());
+  }catch(e){ return LS.get('pj2_prayers')||[]; }
+}
+
+async function fsSavePrayer(prayer){
+  if(!firebaseReady || !uid()){
+    LS.set('pj2_prayers', prayers);
+    return;
+  }
+  try{
+    await db.collection('users').doc(uid()).collection('prayers').doc(String(prayer.id)).set(prayer);
+  }catch(e){ LS.set('pj2_prayers', prayers); }
+}
+
+async function fsDeletePrayer(id){
+  if(!firebaseReady || !uid()){
+    LS.set('pj2_prayers', prayers);
+    return;
+  }
+  try{
+    await db.collection('users').doc(uid()).collection('prayers').doc(String(id)).delete();
+  }catch(e){ LS.set('pj2_prayers', prayers); }
+}
+
+// ── 인증 ──
+function signInWithGoogle(){
+  const provider = new firebase.auth.GoogleAuthProvider();
+  auth.signInWithPopup(provider).catch(err=>{
+    alert('로그인 실패: '+err.message);
+  });
+}
+
+function signOut(){
+  closeUserMenu();
+  if(auth) auth.signOut();
+}
+
+function toggleUserMenu(){
+  const menu = document.getElementById('user-menu');
+  const backdrop = document.getElementById('menu-backdrop');
+  const isOpen = menu.classList.contains('open');
+  if(isOpen){ closeUserMenu(); } else {
+    menu.classList.add('open');
+    backdrop.classList.add('open');
+  }
+}
+function closeUserMenu(){
+  document.getElementById('user-menu').classList.remove('open');
+  document.getElementById('menu-backdrop').classList.remove('open');
+}
+
+// ── 인증 상태 감지 ──
+function setupAuth(){
+  if(!firebaseReady){
+    // Firebase 미설정: 게스트 모드로 바로 진입
+    document.getElementById('loading-screen').style.display='none';
+    document.getElementById('login-screen').style.display='none';
+    document.getElementById('app').style.display='flex';
+    loadAppData(null);
+    return;
+  }
+  auth.onAuthStateChanged(async user=>{
+    document.getElementById('loading-screen').style.display='none';
+    if(user){
+      currentUser = user;
+      document.getElementById('login-screen').style.display='none';
+      document.getElementById('app').style.display='flex';
+      updateUserUI(user);
+      await loadAppData(user);
+    } else {
+      currentUser = null;
+      document.getElementById('app').style.display='none';
+      document.getElementById('login-screen').style.display='flex';
+    }
+  });
+}
+
+function updateUserUI(user){
+  const firstName = (user.displayName||'').split(' ')[0] || '사용자';
+  document.getElementById('user-name-short').textContent = firstName;
+  document.getElementById('menu-full-name').textContent = user.displayName||'사용자';
+  document.getElementById('menu-email').textContent = user.email||'';
+
+  if(user.photoURL){
+    const img = document.getElementById('user-avatar');
+    const ph  = document.getElementById('avatar-placeholder');
+    img.src = user.photoURL;
+    img.style.display = 'block';
+    ph.style.display  = 'none';
+  } else {
+    const name = user.displayName||'?';
+    document.getElementById('avatar-placeholder').textContent = name.charAt(0).toUpperCase();
+  }
+}
+
+async function loadAppData(user){
+  [history, prayers] = await Promise.all([fsGetDiaries(), fsGetPrayers()]);
+  renderPrayers();
+  renderHist();
+  updateStats();
+}
+
+// ── 초기화 ──
+function init(){
+  const d = new Date();
+  document.getElementById('today-dt').textContent =
+    d.toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric',weekday:'long'});
+
+  vi = Math.floor(Math.random()*VERSES.length);
+  showVerse();
+
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  if(isIOS && !window.navigator.standalone){
+    document.getElementById('install-banner').style.display='flex';
+  }
+
+  // service worker
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('./sw.js').catch(()=>{});
+  }
+}
+
+// ── 말씀 ──
+function showVerse(){
+  const v=VERSES[vi];
+  document.getElementById('vt').textContent=v.t;
+  document.getElementById('vr').textContent='— '+v.r;
+  document.getElementById('vth').textContent='#'+v.th;
+}
+function nextVerse(){
+  vi=(vi+1)%VERSES.length;
+  showVerse();
+}
+
+// ── 탭 전환 ──
+function go(id){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
+  document.getElementById('pg-'+id).classList.add('on');
+  document.getElementById('tab-'+id).classList.add('on');
+  document.getElementById('scroll-wrap').scrollTop=0;
+}
+
+// ── 감정일기 ──
+function selCond(el,v){
+  document.querySelectorAll('.cond-btn').forEach(b=>b.classList.remove('on'));
+  el.classList.add('on'); condVal=v;
+}
+function selEm(el,type,name){
+  el.classList.toggle('on');
+  const arr=type==='pos'?selPosArr:selNegArr;
+  const idx=arr.indexOf(name);
+  if(idx>=0) arr.splice(idx,1); else arr.push(name);
+}
+
+async function saveDiary(){
+  const dateKey = new Date().toISOString().split('T')[0];
+  const entry={
+    dateKey,
+    date: new Date().toLocaleDateString('ko-KR'),
+    cond: condVal,
+    posEm:[...selPosArr], negEm:[...selNegArr],
+    posScore: document.getElementById('pos-score').value,
+    negScore: document.getElementById('neg-score').value,
+    posReason: document.getElementById('pos-reason').value,
+    negReason: document.getElementById('neg-reason').value,
+    gratPerson: document.getElementById('grateful-person').value,
+    gratReason: document.getElementById('grateful-reason').value,
+    healing: document.getElementById('healing').value,
+    wish: document.getElementById('wish').value,
+    thanks3: document.getElementById('thanks3').value,
+    praise: document.getElementById('praise').value,
+    regret: document.getElementById('regret').value,
+    verse: VERSES[vi].r
+  };
+  await fsSaveDiary(entry);
+  renderHist();
+  updateStats();
+  alert('일기가 저장되었어요 🙏\n매일 꾸준히 기록해봐요!');
+}
+
+// ── 기도제목 ──
+async function addPrayer(){
+  const inp=document.getElementById('p-input');
+  const cat=document.getElementById('p-cat').value;
+  const txt=inp.value.trim();
+  if(!txt)return;
+  const prayer = {id:Date.now(),text:txt,cat,status:'praying',
+    createdAt:new Date().toLocaleDateString('ko-KR'),answeredAt:null};
+  prayers.push(prayer);
+  inp.value='';
+  await fsSavePrayer(prayer);
+  renderPrayers(); updateStats();
+}
+
+async function cycleStatus(id){
+  const p=prayers.find(x=>x.id===id);
+  if(!p)return;
+  if(p.status==='praying'){p.status='answered';p.answeredAt=new Date().toLocaleDateString('ko-KR');}
+  else{p.status='praying';p.answeredAt=null;}
+  await fsSavePrayer(p);
+  renderPrayers(); updateStats();
+}
+
+async function delPrayer(id){
+  if(!confirm('이 기도제목을 삭제할까요?'))return;
+  prayers=prayers.filter(x=>x.id!==id);
+  await fsDeletePrayer(id);
+  renderPrayers(); updateStats();
+}
+
+const CAT_BADGES={개인:'badge-purple',가족:'badge-teal',친구:'badge-pink',교회:'badge-amber',나라:'badge-blue',감사:'badge-purple',치유:'badge-teal',기타:'badge-gray'};
+const CAT_ICONS={개인:'🙏',가족:'👨‍👩‍👧',친구:'👫',교회:'⛪',나라:'🇰🇷',감사:'✨',치유:'💊',기타:'📌'};
+
+function renderPrayers(){
+  const el=document.getElementById('prayer-list');
+  if(!prayers.length){
+    el.innerHTML='<div style="color:var(--text2);font-size:13px;padding:12px 0;text-align:center">기도제목을 추가해보세요 🙏</div>';
+    return;
+  }
+  const cats=['개인','가족','친구','교회','나라','감사','치유','기타'];
+  let html='';
+  cats.forEach(cat=>{
+    const items=prayers.filter(p=>p.cat===cat);
+    if(!items.length)return;
+    html+=`<div class="prayer-cat-label">${CAT_ICONS[cat]} ${cat}</div>`;
+    items.forEach(p=>{
+      const isDone=p.status==='answered';
+      html+=`<div class="prayer-item">
+        <button class="pcheck ${p.status}" onclick="cycleStatus(${p.id})" title="${isDone?'응답됨 — 다시 기도중으로':'기도중 — 클릭하면 응답됨'}">${isDone?'✓':'♥'}</button>
+        <div class="prayer-body">
+          <div class="prayer-txt${isDone?' done':''}">${esc(p.text)}</div>
+          <div class="prayer-meta">
+            <span class="badge ${isDone?'badge-teal':'badge-purple'}">${isDone?'🙌 응답됨':'🙏 기도중'}</span>
+            <span style="font-size:10px;color:var(--text2)">${isDone&&p.answeredAt?p.answeredAt+' 응답':p.createdAt+' 시작'}</span>
+          </div>
+        </div>
+        <button class="pdel" onclick="delPrayer(${p.id})" aria-label="삭제">×</button>
+      </div>`;
+    });
+  });
+  el.innerHTML=html;
+}
+
+// ── 기록 탭 ──
+const EM_MAP={감사:'🙏',기쁨:'😊',평안:'😌',설렘:'✨',용기:'💪',사랑:'❤️',희망:'🌟',만족:'😇',슬픔:'😢',불안:'😰',지침:'😩',화남:'😠',외로움:'🥺',혼란:'😵',두려움:'😱',실망:'😓'};
+
+function renderHist(){
+  const el=document.getElementById('hist-list');
+  if(!history.length){
+    el.innerHTML='<div style="color:var(--text2);font-size:13px;padding:12px 0;text-align:center">아직 기록이 없어요<br>첫 일기를 써보세요! ✏️</div>';
+    return;
+  }
+  el.innerHTML = history.slice(0,30).map((e,i)=> buildHistItem(e,i)).join('');
+}
+
+function buildHistItem(e, i){
+  const emojis = [...(e.posEm||[]),(e.negEm||[])].slice(0,5).map(em=>EM_MAP[em]||'💭').join(' ');
+  const preview = e.thanks3||e.praise||e.wish||'(내용 없음)';
+
+  // 상세 내용 섹션
+  let detail = '';
+
+  // 감정 섹션
+  if((e.posEm||[]).length||(e.negEm||[]).length){
+    let emChips='';
+    (e.posEm||[]).forEach(em=>{ emChips+=`<span class="detail-em-chip pos">${EM_MAP[em]||''} ${em}</span>`; });
+    (e.negEm||[]).forEach(em=>{ emChips+=`<span class="detail-em-chip neg">${EM_MAP[em]||''} ${em}</span>`; });
+    detail+=`<div class="detail-section">
+      <div class="detail-section-title">감정</div>
+      <div class="detail-em-row">${emChips}</div>`;
+    if(e.posEm?.length){
+      detail+=`<div class="detail-row"><span class="detail-key">긍정 점수</span><span class="detail-val detail-score">${e.posScore||'-'}/10</span></div>`;
+      if(e.posReason) detail+=`<div class="detail-row"><span class="detail-key">긍정 이유</span><span class="detail-val">${esc(e.posReason)}</span></div>`;
+    }
+    if(e.negEm?.length){
+      detail+=`<div class="detail-row"><span class="detail-key">부정 점수</span><span class="detail-val detail-score">${e.negScore||'-'}/10</span></div>`;
+      if(e.negReason) detail+=`<div class="detail-row"><span class="detail-key">부정 이유</span><span class="detail-val">${esc(e.negReason)}</span></div>`;
+    }
+    detail+='</div>';
+  }
+
+  // 하루 돌아보기
+  const hasMisc = e.gratPerson||e.healing||e.wish;
+  if(hasMisc){
+    detail+=`<div class="detail-section"><div class="detail-section-title">오늘 하루</div>`;
+    if(e.gratPerson) detail+=`<div class="detail-row"><span class="detail-key">고마운 사람</span><span class="detail-val">${esc(e.gratPerson)}${e.gratReason?' — '+esc(e.gratReason):''}</span></div>`;
+    if(e.healing)    detail+=`<div class="detail-row"><span class="detail-key">오늘의 힐링</span><span class="detail-val">${esc(e.healing)}</span></div>`;
+    if(e.wish)       detail+=`<div class="detail-row"><span class="detail-key">하고 싶었던 일</span><span class="detail-val">${esc(e.wish)}</span></div>`;
+    detail+='</div>';
+  }
+
+  // 감사한 일 3가지
+  if(e.thanks3){
+    const lines = e.thanks3.trim().split('\n').filter(l=>l.trim());
+    detail+=`<div class="detail-section"><div class="detail-section-title">감사한 일 3가지</div>`;
+    lines.forEach(l=>{ detail+=`<div class="thanks-item">${esc(l)}</div>`; });
+    detail+='</div>';
+  }
+
+  // 자기 돌봄
+  if(e.praise||e.regret){
+    detail+=`<div class="detail-section"><div class="detail-section-title">자기 돌봄</div>`;
+    if(e.praise) detail+=`<div class="detail-row"><span class="detail-key">나에게 칭찬 🌸</span><span class="detail-val">${esc(e.praise)}</span></div>`;
+    if(e.regret) detail+=`<div class="detail-row"><span class="detail-key">아쉬웠던 점</span><span class="detail-val">${esc(e.regret)}</span></div>`;
+    detail+='</div>';
+  }
+
+  if(e.verse){
+    const vObj = VERSES.find(v=>v.r===e.verse);
+    detail+=`<div style="
+      margin-top:10px;
+      background:linear-gradient(135deg,#e8f0fd 0%,#d4e6ff 100%);
+      border:1px solid var(--purple-mid);
+      border-radius:var(--radius-sm);
+      padding:12px 14px;
+      position:relative;
+      overflow:hidden;
+    ">
+      <div style="
+        position:absolute;top:-8px;left:8px;
+        font-size:48px;color:rgba(153,187,245,0.4);
+        font-family:'Noto Serif KR',serif;line-height:1;
+      ">“</div>
+      ${vObj ? `<div style="
+        font-family:'Noto Serif KR',serif;
+        font-size:12px;color:#0047b3;line-height:1.8;
+        padding-top:10px;position:relative;
+      ">${esc(vObj.t)}</div>` : ''}
+      <div style="
+        font-size:11px;font-weight:700;color:var(--purple);
+        margin-top:6px;text-align:right;
+      ">📖 ${esc(e.verse)}</div>
+    </div>`;}
+
+
+  return `<div class="hist-item" id="hi-${i}">
+    <div class="hist-header" onclick="toggleHist(${i})">
+      <div class="hist-emo-big">${emojis||'📔'}</div>
+      <div class="hist-summary">
+        <div class="hist-date">${e.date||e.dateKey||''}</div>
+        ${e.cond?`<span class="hist-cond-badge">${e.cond}</span>`:''}
+        <div class="hist-prev">${esc(preview).substring(0,60)}</div>
+      </div>
+      <div class="hist-chevron">▾</div>
+    </div>
+    <div class="hist-detail">${detail||'<div style="color:var(--text2);font-size:12px">저장된 내용이 없어요</div>'}</div>
+  </div>`;
+}
+
+function toggleHist(i){
+  const el = document.getElementById('hi-'+i);
+  if(el) el.classList.toggle('expanded');
+}
+
+function updateStats(){
+  document.getElementById('s-days').textContent=history.length;
+  document.getElementById('s-prayers').textContent=prayers.length;
+  document.getElementById('s-ans').textContent=prayers.filter(p=>p.status==='answered').length;
+  document.getElementById('s-praying').textContent=prayers.filter(p=>p.status==='praying').length;
+}
+
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ── 시작 ──
+init();
+setupAuth();
+</script>
+<script>twemoji.parse(document.body, {folder: 'svg', ext: '.svg'});</script>
+</body>
+</html>
