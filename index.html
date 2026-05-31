@@ -1012,15 +1012,6 @@ function init(){
   if(isIOS && !window.navigator.standalone){
     document.getElementById('install-banner').style.display='flex';
   }
-
-  // service worker: 기존 캐시 해제 후 최신 버전 등록
-  if('serviceWorker' in navigator){
-    navigator.serviceWorker.getRegistrations().then(registrations => {
-      for(const reg of registrations) reg.unregister();
-    }).then(() => {
-      navigator.serviceWorker.register('./sw.js?v=2').catch(()=>{});
-    });
-  }
 }
 
 // ── 말씀 ──
