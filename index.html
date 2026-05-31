@@ -421,6 +421,49 @@ img.emoji { width: 40px; height: 40px; vertical-align: middle; }
 .thanks-item { font-size: 12px; color: var(--text); margin-bottom: 3px; padding-left: 12px; position: relative; }
 .thanks-item::before { content: '•'; position: absolute; left: 0; color: var(--purple); }
 
+/* ── SAVED VERSES ── */
+.saved-verse-item {
+  padding: 12px 0; border-bottom: 1px solid var(--border);
+  display: flex; gap: 10px; align-items: flex-start;
+}
+.saved-verse-item:last-child { border-bottom: none; }
+.saved-verse-body { flex: 1; min-width: 0; }
+.saved-verse-text {
+  font-family: 'Noto Serif KR', serif;
+  font-size: 13px; color: #0047b3; line-height: 1.7;
+}
+.saved-verse-ref { font-size: 11px; font-weight: 700; color: var(--purple); margin-top: 4px; }
+.saved-verse-theme {
+  display: inline-block; font-size: 10px;
+  background: var(--purple-light); color: var(--purple);
+  padding: 1px 7px; border-radius: 10px; margin-top: 3px;
+}
+
+/* ── SERMON NOTES ── */
+.sermon-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.sermon-note-item {
+  border-bottom: 1px solid var(--border); overflow: hidden;
+}
+.sermon-note-item:last-child { border-bottom: none; }
+.sermon-note-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 0; cursor: pointer; user-select: none;
+}
+.sermon-note-header:active { opacity: .7; }
+.sermon-note-summary { flex: 1; min-width: 0; }
+.sermon-note-title { font-size: 13px; font-weight: 700; color: var(--text); }
+.sermon-note-sub { font-size: 11px; color: var(--text2); margin-top: 2px; }
+.sermon-chevron { font-size: 14px; color: var(--text2); flex-shrink: 0; transition: transform .2s; }
+.sermon-note-item.expanded .sermon-chevron { transform: rotate(180deg); }
+.sermon-note-detail {
+  display: none; padding: 0 0 14px;
+  animation: fadeIn .2s ease;
+}
+.sermon-note-item.expanded .sermon-note-detail { display: block; }
+.sermon-detail-row { margin-bottom: 8px; }
+.sermon-detail-label { font-size: 10px; font-weight: 700; color: var(--purple); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 3px; }
+.sermon-detail-val { font-size: 13px; color: var(--text); line-height: 1.7; white-space: pre-wrap; }
+
 /* ── INSTALL BANNER ── */
 .install-banner {
   background: linear-gradient(135deg, var(--purple), var(--purple-dark));
@@ -505,6 +548,41 @@ img.emoji { width: 40px; height: 40px; vertical-align: middle; }
       <div class="verse-theme" id="vth"></div>
     </div>
     <button class="btn-outline" onclick="nextVerse()">🔄 다른 말씀 받기</button>
+    <button class="btn-outline" id="save-verse-btn" onclick="saveCurrentVerse()">💾 이 말씀 저장하기</button>
+
+    <!-- 저장한 말씀 -->
+    <div class="card" id="saved-verses-section" style="display:none">
+      <div class="sec-lbl">📖 저장한 말씀</div>
+      <div id="saved-verses-list"></div>
+    </div>
+
+    <!-- 말씀 기록하기 -->
+    <div class="card">
+      <div class="sec-lbl">📝 말씀 기록하기</div>
+      <div class="sermon-form-grid">
+        <div>
+          <div class="field-lbl">날짜</div>
+          <input type="date" id="sn-date" style="width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;background:var(--bg);font-family:inherit;color:var(--text)">
+        </div>
+        <div>
+          <div class="field-lbl">성경 본문</div>
+          <input type="text" id="sn-ref" placeholder="예: 요한복음 3:16">
+        </div>
+      </div>
+      <div class="field-lbl">설교 제목</div>
+      <input type="text" id="sn-title" placeholder="오늘 들은 설교 제목">
+      <div class="field-lbl">말씀 내용 / 은혜받은 내용</div>
+      <textarea id="sn-content" placeholder="말씀에서 받은 은혜, 깨달음을 적어보세요..." style="min-height:100px"></textarea>
+      <div class="field-lbl">적용할 점</div>
+      <textarea id="sn-apply" placeholder="이 말씀을 삶에 어떻게 적용할까요?" style="min-height:64px"></textarea>
+      <button class="btn-purple" onclick="saveSermonNote()">💾 기록 저장</button>
+    </div>
+
+    <!-- 저장된 설교 기록 -->
+    <div id="sermon-notes-section" style="display:none">
+      <div class="sec-lbl" style="padding:0 4px">📋 말씀 기록 목록</div>
+      <div class="card" id="sermon-notes-list"></div>
+    </div>
   </div>
 
   <!-- 감정일기 -->
@@ -705,7 +783,7 @@ const VERSES=[
 // ── 앱 상태 ──
 let vi = 0;
 let selPosArr = [], selNegArr = [], condVal = '';
-let prayers = [], history = [];
+let prayers = [], history = [], savedVerses = [], sermonNotes = [];
 
 // ── 로컬 fallback 스토리지 ──
 const LS = {
@@ -769,6 +847,54 @@ async function fsDeletePrayer(id){
   try{
     await db.collection('users').doc(uid()).collection('prayers').doc(String(id)).delete();
   }catch(e){ LS.set('pj2_prayers', prayers); }
+}
+
+// ── Firestore: 저장한 말씀 ──
+async function fsGetSavedVerses(){
+  if(!firebaseReady||!uid()) return LS.get('savedVerses')||[];
+  try{
+    const snap=await db.collection('users').doc(uid()).collection('savedVerses')
+      .orderBy('savedAt','desc').limit(50).get();
+    return snap.docs.map(d=>d.data());
+  }catch(e){ return LS.get('savedVerses')||[]; }
+}
+async function fsSaveVerse(v){
+  if(!firebaseReady||!uid()){
+    LS.set('savedVerses',savedVerses); return;
+  }
+  try{ await db.collection('users').doc(uid()).collection('savedVerses').doc(v.id).set(v); }
+  catch(e){ LS.set('savedVerses',savedVerses); }
+}
+async function fsDeleteVerse(id){
+  if(!firebaseReady||!uid()){
+    LS.set('savedVerses',savedVerses); return;
+  }
+  try{ await db.collection('users').doc(uid()).collection('savedVerses').doc(id).delete(); }
+  catch(e){ LS.set('savedVerses',savedVerses); }
+}
+
+// ── Firestore: 설교 기록 ──
+async function fsGetSermonNotes(){
+  if(!firebaseReady||!uid()) return LS.get('sermonNotes')||[];
+  try{
+    const snap=await db.collection('users').doc(uid()).collection('sermonNotes')
+      .orderBy('savedAt','desc').limit(50).get();
+    return snap.docs.map(d=>d.data());
+  }catch(e){ return LS.get('sermonNotes')||[]; }
+}
+async function fsSaveSermonNote(n){
+  if(!firebaseReady||!uid()){
+    LS.set('sermonNotes',sermonNotes); return;
+  }
+  try{ await db.collection('users').doc(uid()).collection('sermonNotes').doc(n.id).set(n); }
+  catch(e){ LS.set('sermonNotes',sermonNotes); }
+}
+async function fsDeleteSermonNote(id){
+  if(!firebaseReady||!uid()){
+    LS.set('sermonNotes',sermonNotes); return;
+  }
+  try{ await db.collection('users').doc(uid()).collection('sermonNotes').doc(id).delete(); }
+  catch(e){ LS.set('sermonNotes',sermonNotes); }
 }
 
 // ── 인증 ──
@@ -843,10 +969,15 @@ function updateUserUI(user){
 }
 
 async function loadAppData(user){
-  [history, prayers] = await Promise.all([fsGetDiaries(), fsGetPrayers()]);
+  [history, prayers, savedVerses, sermonNotes] = await Promise.all([
+    fsGetDiaries(), fsGetPrayers(), fsGetSavedVerses(), fsGetSermonNotes()
+  ]);
   renderPrayers();
   renderHist();
   updateStats();
+  renderSavedVerses();
+  renderSermonNotes();
+  updateSaveBtn();
 }
 
 // ── 초기화 ──
@@ -857,6 +988,10 @@ function init(){
 
   vi = Math.floor(Math.random()*VERSES.length);
   showVerse();
+
+  // 날짜 input 기본값 = 오늘
+  const todayISO = new Date().toISOString().split('T')[0];
+  document.getElementById('sn-date').value = todayISO;
 
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
   if(isIOS && !window.navigator.standalone){
@@ -875,10 +1010,111 @@ function showVerse(){
   document.getElementById('vt').textContent=v.t;
   document.getElementById('vr').textContent='— '+v.r;
   document.getElementById('vth').textContent='#'+v.th;
+  updateSaveBtn();
 }
 function nextVerse(){
   vi=(vi+1)%VERSES.length;
   showVerse();
+}
+
+function updateSaveBtn(){
+  const btn=document.getElementById('save-verse-btn');
+  if(!btn) return;
+  const v=VERSES[vi];
+  const already=savedVerses.some(s=>s.ref===v.r);
+  btn.textContent = already ? '✅ 저장됨' : '💾 이 말씀 저장하기';
+  btn.style.opacity = already ? '0.6' : '1';
+  btn.onclick = already ? null : saveCurrentVerse;
+}
+
+async function saveCurrentVerse(){
+  const v=VERSES[vi];
+  if(savedVerses.some(s=>s.ref===v.r)) return;
+  const entry={id:Date.now().toString(), text:v.t, ref:v.r, theme:v.th,
+    savedAt:new Date().toISOString()};
+  savedVerses.unshift(entry);
+  await fsSaveVerse(entry);
+  renderSavedVerses();
+  updateSaveBtn();
+}
+
+async function deleteSavedVerse(id){
+  if(!confirm('저장된 말씀을 삭제할까요?')) return;
+  savedVerses=savedVerses.filter(s=>s.id!==id);
+  await fsDeleteVerse(id);
+  renderSavedVerses();
+  updateSaveBtn();
+}
+
+function renderSavedVerses(){
+  const sec=document.getElementById('saved-verses-section');
+  const el=document.getElementById('saved-verses-list');
+  if(!savedVerses.length){ sec.style.display='none'; return; }
+  sec.style.display='block';
+  el.innerHTML=savedVerses.map(v=>`
+    <div class="saved-verse-item">
+      <div class="saved-verse-body">
+        <div class="saved-verse-text">${esc(v.text)}</div>
+        <div class="saved-verse-ref">— ${esc(v.ref)}</div>
+        <span class="saved-verse-theme">#${esc(v.theme)}</span>
+      </div>
+      <button class="pdel" onclick="deleteSavedVerse('${v.id}')" aria-label="삭제">×</button>
+    </div>`).join('');
+}
+
+// ── 설교 기록 ──
+async function saveSermonNote(){
+  const title   = document.getElementById('sn-title').value.trim();
+  const ref     = document.getElementById('sn-ref').value.trim();
+  const date    = document.getElementById('sn-date').value;
+  const content = document.getElementById('sn-content').value.trim();
+  const apply   = document.getElementById('sn-apply').value.trim();
+  if(!title && !content){ alert('제목 또는 내용을 입력해주세요.'); return; }
+  const note={id:Date.now().toString(), title, ref, date, content, apply,
+    savedAt:new Date().toISOString()};
+  sermonNotes.unshift(note);
+  await fsSaveSermonNote(note);
+  // 폼 초기화
+  ['sn-title','sn-ref','sn-content','sn-apply'].forEach(id=>{
+    document.getElementById(id).value='';
+  });
+  document.getElementById('sn-date').value=new Date().toISOString().split('T')[0];
+  renderSermonNotes();
+  alert('말씀 기록이 저장되었어요 📖');
+}
+
+async function deleteSermonNote(id){
+  if(!confirm('이 말씀 기록을 삭제할까요?')) return;
+  sermonNotes=sermonNotes.filter(n=>n.id!==id);
+  await fsDeleteSermonNote(id);
+  renderSermonNotes();
+}
+
+function toggleSermonNote(id){
+  const el=document.getElementById('sn-'+id);
+  if(el) el.classList.toggle('expanded');
+}
+
+function renderSermonNotes(){
+  const sec=document.getElementById('sermon-notes-section');
+  const el=document.getElementById('sermon-notes-list');
+  if(!sermonNotes.length){ sec.style.display='none'; return; }
+  sec.style.display='block';
+  el.innerHTML=sermonNotes.map(n=>`
+    <div class="sermon-note-item" id="sn-${n.id}">
+      <div class="sermon-note-header" onclick="toggleSermonNote('${n.id}')">
+        <div class="sermon-note-summary">
+          <div class="sermon-note-title">${esc(n.title)||'(제목 없음)'}</div>
+          <div class="sermon-note-sub">${n.date||''} ${n.ref?'· '+esc(n.ref):''}</div>
+        </div>
+        <button class="pdel" onclick="event.stopPropagation();deleteSermonNote('${n.id}')" aria-label="삭제" style="margin-right:4px">×</button>
+        <div class="sermon-chevron">▾</div>
+      </div>
+      <div class="sermon-note-detail">
+        ${n.content?`<div class="sermon-detail-row"><div class="sermon-detail-label">말씀 / 은혜</div><div class="sermon-detail-val">${esc(n.content)}</div></div>`:''}
+        ${n.apply?`<div class="sermon-detail-row"><div class="sermon-detail-label">적용할 점</div><div class="sermon-detail-val">${esc(n.apply)}</div></div>`:''}
+      </div>
+    </div>`).join('');
 }
 
 // ── 탭 전환 ──
