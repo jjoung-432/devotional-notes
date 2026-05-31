@@ -310,6 +310,29 @@ img.emoji { width: 40px; height: 40px; vertical-align: middle; }
 .prayer-body { flex: 1; min-width: 0; }
 .prayer-txt { font-size: 13px; line-height: 1.5; color: var(--text); }
 .prayer-txt.done { text-decoration: line-through; color: var(--text2); }
+.prayer-content {
+  font-size: 12px; color: var(--text2); margin-top: 4px; line-height: 1.6;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; cursor: pointer; white-space: pre-wrap;
+  border-left: 2px solid var(--purple-mid); padding-left: 7px;
+}
+.prayer-content.open {
+  display: block; -webkit-line-clamp: unset; overflow: visible;
+}
+.prayer-content-toggle {
+  display: inline-block; font-size: 10px; color: var(--purple);
+  margin-top: 2px; cursor: pointer; font-weight: 600;
+}
+.prayer-add-form { margin-top: 12px; }
+.prayer-add-form input[type=text] { margin-bottom: 6px; }
+.prayer-add-textarea {
+  width: 100%; min-height: 58px; resize: none;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 9px 12px; font-size: 12px; line-height: 1.6;
+  color: var(--text); background: var(--bg); font-family: inherit;
+  margin-bottom: 6px;
+}
+.prayer-add-textarea:focus { outline: none; border-color: var(--purple); }
 .prayer-meta { display: flex; gap: 5px; margin-top: 4px; flex-wrap: wrap; align-items: center; }
 .badge { font-size: 10px; padding: 2px 8px; border-radius: 20px; }
 .badge-purple { background: var(--purple-light); color: var(--purple); }
@@ -567,19 +590,22 @@ img.emoji { width: 40px; height: 40px; vertical-align: middle; }
     <div class="card">
       <div class="sec-lbl">나의 기도제목</div>
       <div id="prayer-list"><div style="color:var(--text2);font-size:13px;padding:8px 0;text-align:center">기도제목을 추가해보세요 🙏</div></div>
-      <div class="add-row">
-        <input type="text" id="p-input" placeholder="기도제목 입력" onkeydown="if(event.key==='Enter')addPrayer()">
-        <select id="p-cat">
-          <option value="개인">🙏 개인</option>
-          <option value="가족">👨‍👩‍👧 가족</option>
-          <option value="친구">👫 친구</option>
-          <option value="교회">⛪ 교회</option>
-          <option value="나라">🇰🇷 나라</option>
-          <option value="감사">✨ 감사</option>
-          <option value="치유">💊 치유</option>
-          <option value="기타">📌 기타</option>
-        </select>
-        <button onclick="addPrayer()">+</button>
+      <div class="prayer-add-form">
+        <div class="add-row">
+          <input type="text" id="p-input" placeholder="기도제목 제목" onkeydown="if(event.key==='Enter')document.getElementById('p-content').focus()">
+          <select id="p-cat">
+            <option value="개인">🙏 개인</option>
+            <option value="가족">👨‍👩‍👧 가족</option>
+            <option value="친구">👫 친구</option>
+            <option value="교회">⛪ 교회</option>
+            <option value="나라">🇰🇷 나라</option>
+            <option value="감사">✨ 감사</option>
+            <option value="치유">💊 치유</option>
+            <option value="기타">📌 기타</option>
+          </select>
+        </div>
+        <textarea class="prayer-add-textarea" id="p-content" placeholder="이 기도제목에 대해 더 자세히 적어보세요... (선택)"></textarea>
+        <button class="btn-purple" style="margin-top:0" onclick="addPrayer()">+ 기도제목 추가</button>
       </div>
     </div>
   </div>
@@ -904,14 +930,20 @@ async function saveDiary(){
 
 // ── 기도제목 ──
 async function addPrayer(){
-  const inp=document.getElementById('p-input');
-  const cat=document.getElementById('p-cat').value;
-  const txt=inp.value.trim();
-  if(!txt)return;
-  const prayer = {id:Date.now(),text:txt,cat,status:'praying',
-    createdAt:new Date().toLocaleDateString('ko-KR'),answeredAt:null};
+  const inp     = document.getElementById('p-input');
+  const contEl  = document.getElementById('p-content');
+  const cat     = document.getElementById('p-cat').value;
+  const txt     = inp.value.trim();
+  const content = contEl.value.trim();
+  if(!txt) return;
+  const prayer = {
+    id: Date.now(), text: txt, content: content,
+    cat, status: 'praying',
+    createdAt: new Date().toLocaleDateString('ko-KR'), answeredAt: null
+  };
   prayers.push(prayer);
-  inp.value='';
+  inp.value = '';
+  contEl.value = '';
   await fsSavePrayer(prayer);
   renderPrayers(); updateStats();
 }
@@ -932,6 +964,14 @@ async function delPrayer(id){
   renderPrayers(); updateStats();
 }
 
+function togglePrayerExpand(id){
+  const content = document.getElementById('pcontent-'+id);
+  const toggle  = document.getElementById('pctoggle-'+id);
+  if(!content) return;
+  const isOpen = content.classList.toggle('open');
+  if(toggle) toggle.textContent = isOpen ? '접기' : '더보기';
+}
+
 const CAT_BADGES={개인:'badge-purple',가족:'badge-teal',친구:'badge-pink',교회:'badge-amber',나라:'badge-blue',감사:'badge-purple',치유:'badge-teal',기타:'badge-gray'};
 const CAT_ICONS={개인:'🙏',가족:'👨‍👩‍👧',친구:'👫',교회:'⛪',나라:'🇰🇷',감사:'✨',치유:'💊',기타:'📌'};
 
@@ -948,11 +988,15 @@ function renderPrayers(){
     if(!items.length)return;
     html+=`<div class="prayer-cat-label">${CAT_ICONS[cat]} ${cat}</div>`;
     items.forEach(p=>{
-      const isDone=p.status==='answered';
+      const isDone = p.status==='answered';
+      const hasContent = p.content && p.content.trim();
       html+=`<div class="prayer-item">
         <button class="pcheck ${p.status}" onclick="cycleStatus(${p.id})" title="${isDone?'응답됨 — 다시 기도중으로':'기도중 — 클릭하면 응답됨'}">${isDone?'✓':'♥'}</button>
         <div class="prayer-body">
           <div class="prayer-txt${isDone?' done':''}">${esc(p.text)}</div>
+          ${hasContent ? `
+          <div class="prayer-content" id="pcontent-${p.id}" onclick="togglePrayerExpand(${p.id})">${esc(p.content)}</div>
+          <span class="prayer-content-toggle" onclick="togglePrayerExpand(${p.id})" id="pctoggle-${p.id}">더보기</span>` : ''}
           <div class="prayer-meta">
             <span class="badge ${isDone?'badge-teal':'badge-purple'}">${isDone?'🙌 응답됨':'🙏 기도중'}</span>
             <span style="font-size:10px;color:var(--text2)">${isDone&&p.answeredAt?p.answeredAt+' 응답':p.createdAt+' 시작'}</span>
