@@ -2,10 +2,10 @@
   "name": "묵상노트",
   "short_name": "묵상노트",
   "description": "말씀 묵상, 감정일기, 기도제목을 기록하는 크리스천 묵상 앱",
-  "start_url": "./index.html",
+  "start_url": "./index.html?v=2",
   "display": "standalone",
-  "background_color": "#534AB7",
-  "theme_color": "#534AB7",
+  "background_color": "#005adc",
+  "theme_color": "#005adc",
   "orientation": "portrait-primary",
   "lang": "ko",
   "icons": [
