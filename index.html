@@ -359,6 +359,38 @@ img.emoji { width: 40px; height: 40px; vertical-align: middle; }
 .badge-amber { background: #FAEEDA; color: #633806; }
 .badge-gray { background: #F1EFE8; color: #444441; }
 .pdel { background: none; border: none; color: var(--text2); cursor: pointer; font-size: 18px; padding: 2px; flex-shrink: 0; line-height: 1; }
+.pedit { background: none; border: none; color: var(--purple); cursor: pointer; font-size: 15px; padding: 2px; flex-shrink: 0; line-height: 1; opacity: .7; }
+.pedit:active { opacity: 1; }
+.prayer-item.editing {
+  background: var(--purple-light);
+  border-radius: var(--radius-sm);
+  padding: 10px 8px;
+  margin: 0 -8px;
+}
+.prayer-edit-input {
+  width: 100%; padding: 8px 10px; margin-bottom: 6px;
+  border: 1px solid var(--purple-mid); border-radius: var(--radius-sm);
+  font-size: 13px; background: white; font-family: inherit; color: var(--text);
+}
+.prayer-edit-input:focus { outline: none; border-color: var(--purple); }
+.prayer-edit-textarea {
+  width: 100%; min-height: 52px; resize: none; padding: 8px 10px; margin-bottom: 6px;
+  border: 1px solid var(--purple-mid); border-radius: var(--radius-sm);
+  font-size: 12px; line-height: 1.6; background: white; font-family: inherit; color: var(--text);
+}
+.prayer-edit-textarea:focus { outline: none; border-color: var(--purple); }
+.prayer-edit-select {
+  width: 100%; padding: 8px 10px; margin-bottom: 8px;
+  border: 1px solid var(--purple-mid); border-radius: var(--radius-sm);
+  font-size: 12px; background: white; font-family: inherit; color: var(--text);
+}
+.prayer-edit-actions { display: flex; gap: 6px; }
+.prayer-edit-actions button {
+  flex: 1; padding: 8px; border-radius: var(--radius-sm);
+  font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit; border: none;
+}
+.btn-edit-save { background: var(--purple); color: white; }
+.btn-edit-cancel { background: white; color: var(--text2); border: 1px solid var(--border) !important; }
 .add-row { display: flex; gap: 6px; margin-top: 10px; }
 .add-row input { flex: 1; }
 .add-row select {
@@ -1237,6 +1269,37 @@ async function delPrayer(id){
   renderPrayers(); updateStats();
 }
 
+// ── 기도제목 수정 ──
+let editingPrayerId = null;
+
+function startEditPrayer(id){
+  editingPrayerId = id;
+  renderPrayers();
+  // 포커스 이동
+  const inp = document.getElementById('pedit-title-'+id);
+  if(inp){ inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+}
+
+function cancelEditPrayer(){
+  editingPrayerId = null;
+  renderPrayers();
+}
+
+async function saveEditPrayer(id){
+  const p = prayers.find(x=>x.id===id);
+  if(!p) return;
+  const newText    = (document.getElementById('pedit-title-'+id).value||'').trim();
+  const newContent = (document.getElementById('pedit-content-'+id).value||'').trim();
+  const newCat     = document.getElementById('pedit-cat-'+id).value;
+  if(!newText){ alert('제목을 입력해주세요.'); return; }
+  p.text    = newText;
+  p.content = newContent;
+  p.cat     = newCat;
+  editingPrayerId = null;
+  await fsSavePrayer(p);
+  renderPrayers();
+}
+
 function togglePrayerExpand(id){
   const content = document.getElementById('pcontent-'+id);
   const toggle  = document.getElementById('pctoggle-'+id);
@@ -1261,22 +1324,43 @@ function renderPrayers(){
     if(!items.length)return;
     html+=`<div class="prayer-cat-label">${CAT_ICONS[cat]} ${cat}</div>`;
     items.forEach(p=>{
-      const isDone = p.status==='answered';
+      const isDone     = p.status==='answered';
       const hasContent = p.content && p.content.trim();
-      html+=`<div class="prayer-item">
-        <button class="pcheck ${p.status}" onclick="cycleStatus(${p.id})" title="${isDone?'응답됨 — 다시 기도중으로':'기도중 — 클릭하면 응답됨'}">${isDone?'✓':'♥'}</button>
-        <div class="prayer-body">
-          <div class="prayer-txt${isDone?' done':''}">${esc(p.text)}</div>
-          ${hasContent ? `
-          <div class="prayer-content" id="pcontent-${p.id}" onclick="togglePrayerExpand(${p.id})">${esc(p.content)}</div>
-          <span class="prayer-content-toggle" onclick="togglePrayerExpand(${p.id})" id="pctoggle-${p.id}">더보기</span>` : ''}
-          <div class="prayer-meta">
-            <span class="badge ${isDone?'badge-teal':'badge-purple'}">${isDone?'🙌 응답됨':'🙏 기도중'}</span>
-            <span style="font-size:10px;color:var(--text2)">${isDone&&p.answeredAt?p.answeredAt+' 응답':p.createdAt+' 시작'}</span>
+      const isEditing  = editingPrayerId === p.id;
+
+      if(isEditing){
+        // ── 수정 모드 ──
+        const catOptions = ['개인','가족','친구','교회','나라','감사','치유','기타']
+          .map(c=>`<option value="${c}" ${p.cat===c?'selected':''}>${CAT_ICONS[c]} ${c}</option>`).join('');
+        html+=`<div class="prayer-item editing">
+          <div class="prayer-body">
+            <input  class="prayer-edit-input"    id="pedit-title-${p.id}"   value="${esc(p.text)}"    placeholder="기도제목 제목">
+            <textarea class="prayer-edit-textarea" id="pedit-content-${p.id}" placeholder="기도 내용 (선택)">${esc(p.content||'')}</textarea>
+            <select class="prayer-edit-select"   id="pedit-cat-${p.id}">${catOptions}</select>
+            <div class="prayer-edit-actions">
+              <button class="btn-edit-save"   onclick="saveEditPrayer(${p.id})">✓ 저장</button>
+              <button class="btn-edit-cancel" onclick="cancelEditPrayer()">✕ 취소</button>
+            </div>
           </div>
-        </div>
-        <button class="pdel" onclick="delPrayer(${p.id})" aria-label="삭제">×</button>
-      </div>`;
+        </div>`;
+      } else {
+        // ── 일반 모드 ──
+        html+=`<div class="prayer-item">
+          <button class="pcheck ${p.status}" onclick="cycleStatus(${p.id})" title="${isDone?'응답됨 — 다시 기도중으로':'기도중 — 클릭하면 응답됨'}">${isDone?'✓':'♥'}</button>
+          <div class="prayer-body">
+            <div class="prayer-txt${isDone?' done':''}">${esc(p.text)}</div>
+            ${hasContent ? `
+            <div class="prayer-content" id="pcontent-${p.id}" onclick="togglePrayerExpand(${p.id})">${esc(p.content)}</div>
+            <span class="prayer-content-toggle" onclick="togglePrayerExpand(${p.id})" id="pctoggle-${p.id}">더보기</span>` : ''}
+            <div class="prayer-meta">
+              <span class="badge ${isDone?'badge-teal':'badge-purple'}">${isDone?'🙌 응답됨':'🙏 기도중'}</span>
+              <span style="font-size:10px;color:var(--text2)">${isDone&&p.answeredAt?p.answeredAt+' 응답':p.createdAt+' 시작'}</span>
+            </div>
+          </div>
+          <button class="pedit" onclick="startEditPrayer(${p.id})" aria-label="수정">✏️</button>
+          <button class="pdel"  onclick="delPrayer(${p.id})"       aria-label="삭제">×</button>
+        </div>`;
+      }
     });
   });
   el.innerHTML=html;
