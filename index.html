@@ -513,6 +513,27 @@ img.emoji { width: 40px; height: 40px; vertical-align: middle; }
 .sermon-detail-label { font-size: 10px; font-weight: 700; color: var(--purple); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 3px; }
 .sermon-detail-val { font-size: 13px; color: var(--text); line-height: 1.7; white-space: pre-wrap; }
 
+/* ── PHOTO PREVIEW ── */
+.photo-preview-wrap {
+  position: relative; margin-bottom: 14px; display: none;
+}
+.photo-preview-wrap.on { display: block; }
+.photo-preview-img {
+  width: 100%; max-height: 300px; object-fit: contain;
+  border-radius: var(--radius); border: 1px solid var(--border);
+  background: #f0f0f0;
+  touch-action: pinch-zoom;
+  display: block;
+}
+.photo-preview-close {
+  position: absolute; top: 8px; right: 8px;
+  background: rgba(0,0,0,0.55); color: white;
+  border: none; border-radius: 50%;
+  width: 28px; height: 28px; font-size: 14px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  line-height: 1;
+}
+
 /* ── INSTALL BANNER ── */
 .install-banner {
   background: linear-gradient(135deg, var(--purple), var(--purple-dark));
@@ -602,6 +623,11 @@ img.emoji { width: 40px; height: 40px; vertical-align: middle; }
 
   <!-- 감정일기 -->
   <div class="page" id="pg-diary">
+    <div class="card" style="margin-bottom:12px">
+      <div class="field-lbl" style="margin-top:0">일기 날짜</div>
+      <input type="date" id="diary-date"
+        style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:14px;font-weight:600;background:var(--bg);font-family:inherit;color:var(--purple);accent-color:var(--purple)">
+    </div>
     <div class="card">
       <div class="sec-lbl">마음 컨디션</div>
       <div class="cond-btns" id="cond-btns">
@@ -729,6 +755,18 @@ img.emoji { width: 40px; height: 40px; vertical-align: middle; }
   <div class="page" id="pg-sermon">
     <div class="card">
       <div class="sec-lbl">📝 말씀 기록하기</div>
+
+      <!-- 사진 참고 -->
+      <input type="file" id="sermon-photo-input" accept="image/*" capture="environment"
+        style="display:none" onchange="onSermonPhotoSelected(event)">
+      <button class="btn-outline" style="margin-bottom:12px;margin-top:0"
+        onclick="document.getElementById('sermon-photo-input').click()">
+        📷 필기 사진 참고하기
+      </button>
+      <div class="photo-preview-wrap" id="sermon-photo-wrap">
+        <img class="photo-preview-img" id="sermon-photo-img" src="" alt="참고 사진">
+        <button class="photo-preview-close" onclick="closeSermonPhoto()" aria-label="닫기">✕</button>
+      </div>
       <div class="sermon-form-grid">
         <div>
           <div class="field-lbl">날짜</div>
@@ -1053,6 +1091,9 @@ function init(){
   // 날짜 input 기본값 = 오늘
   const todayISO = new Date().toISOString().split('T')[0];
   document.getElementById('sn-date').value = todayISO;
+  const diaryDateEl = document.getElementById('diary-date');
+  diaryDateEl.value = todayISO;
+  diaryDateEl.max   = todayISO;
 
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
   if(isIOS && !window.navigator.standalone){
@@ -1124,6 +1165,26 @@ function renderSavedVerses(){
         <button class="pdel" onclick="deleteSavedVerse('${v.id}')" aria-label="삭제">×</button>
       </div>
     </div>`).join('');
+}
+
+// ── 말씀기록 사진 참고 ──
+function onSermonPhotoSelected(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  const url = URL.createObjectURL(file);
+  document.getElementById('sermon-photo-img').src = url;
+  document.getElementById('sermon-photo-wrap').classList.add('on');
+  // 사진 아래 날짜 입력 필드로 스크롤
+  document.getElementById('sn-date').scrollIntoView({behavior:'smooth', block:'center'});
+}
+
+function closeSermonPhoto(){
+  const wrap = document.getElementById('sermon-photo-wrap');
+  const img  = document.getElementById('sermon-photo-img');
+  wrap.classList.remove('on');
+  URL.revokeObjectURL(img.src);
+  img.src = '';
+  document.getElementById('sermon-photo-input').value = '';
 }
 
 // ── 설교 기록 ──
@@ -1208,10 +1269,12 @@ function selEm(el,type,name){
 }
 
 async function saveDiary(){
-  const dateKey = new Date().toISOString().split('T')[0];
+  const dateKey = document.getElementById('diary-date').value
+                  || new Date().toISOString().split('T')[0];
+  const dateObj = new Date(dateKey + 'T00:00:00');
   const entry={
     dateKey,
-    date: new Date().toLocaleDateString('ko-KR'),
+    date: dateObj.toLocaleDateString('ko-KR', {year:'numeric',month:'long',day:'numeric',weekday:'short'}),
     cond: condVal,
     posEm:[...selPosArr], negEm:[...selNegArr],
     posScore: document.getElementById('pos-score').value,
