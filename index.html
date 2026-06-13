@@ -992,10 +992,16 @@ function uid(){ return currentUser && currentUser.uid; }
 async function fsGetDiaries(){
   if(!firebaseReady || !uid()) return LS.get('pj2_history')||[];
   try{
+    // orderBy 없이 전체 fetch → JS에서 dateKey 기준 최신순 정렬
+    // (timestamp 필드가 없는 구버전 문서가 있을 수 있어 orderBy 미사용)
     const snap = await db.collection('users').doc(uid()).collection('diaries')
-      .orderBy('timestamp','desc').limit(60).get();
-    return snap.docs.map(d=>d.data());
-  }catch(e){ return LS.get('pj2_history')||[]; }
+      .limit(200).get();
+    const docs = snap.docs.map(d=>d.data());
+    return docs.sort((a,b)=>(b.dateKey||'').localeCompare(a.dateKey||''));
+  }catch(e){
+    console.warn('fsGetDiaries error:', e);
+    return LS.get('pj2_history')||[];
+  }
 }
 
 async function fsSaveDiary(entry){
@@ -1350,6 +1356,9 @@ function go(id){
   document.getElementById('pg-'+id).classList.add('on');
   document.getElementById('tab-'+id).classList.add('on');
   document.getElementById('scroll-wrap').scrollTop=0;
+  if(id==='hist')   renderCalendar();
+  if(id==='sermon') renderSermonNotes();
+  if(id==='saved')  renderSavedVerses();
 }
 
 // ── 감정일기 ──
@@ -1529,12 +1538,175 @@ function renderPrayers(){
 const EM_MAP={감사:'🙏',기쁨:'😊',평안:'😌',설렘:'✨',용기:'💪',사랑:'❤️',희망:'🌟',만족:'😇',슬픔:'😢',불안:'😰',지침:'😩',화남:'😠',외로움:'🥺',혼란:'😵',두려움:'😱',실망:'😓'};
 
 function renderHist(){
-  const el=document.getElementById('hist-list');
-  if(!history.length){
-    el.innerHTML='<div style="color:var(--text2);font-size:13px;padding:12px 0;text-align:center">아직 기록이 없어요<br>첫 일기를 써보세요! ✏️</div>';
+  renderCalendar();
+}
+
+// ── 달력 ──
+function calMove(delta){
+  calendarDate = new Date(calendarDate.getFullYear(), calendarDate.getMonth() + delta, 1);
+  selectedDayKey = null;
+  document.getElementById('cal-detail').classList.remove('on');
+  renderCalendar();
+}
+
+function renderCalendar(){
+  try {
+    const year  = calendarDate.getFullYear();
+    const month = calendarDate.getMonth();
+
+    const titleEl = document.getElementById('cal-title');
+    if(!titleEl) return; // 달력 DOM이 아직 없으면 종료
+    titleEl.textContent = `${year}년 ${month+1}월`;
+
+    // 이번 달 통계
+    const monthPrefix  = `${year}-${String(month+1).padStart(2,'0')}`;
+    const monthEntries = history.filter(e => e.dateKey && e.dateKey.startsWith(monthPrefix));
+    const calCount = document.getElementById('cal-count');
+    const calPos   = document.getElementById('cal-pos-avg');
+    const calNeg   = document.getElementById('cal-neg-avg');
+    if(calCount) calCount.textContent = monthEntries.length;
+    const posArr = monthEntries.map(e=>Number(e.posScore)).filter(n=>n>0);
+    const negArr = monthEntries.map(e=>Number(e.negScore)).filter(n=>n>0);
+    if(calPos) calPos.textContent =
+      posArr.length ? (posArr.reduce((a,b)=>a+b,0)/posArr.length).toFixed(1) : '-';
+    if(calNeg) calNeg.textContent =
+      negArr.length ? (negArr.reduce((a,b)=>a+b,0)/negArr.length).toFixed(1) : '-';
+
+    // 일기 맵 (dateKey → entry)
+    // dateKey 없는 구버전 항목도 date 문자열에서 YYYY-MM-DD 추출 시도
+    const diaryMap = {};
+    history.forEach(e => {
+      if(e.dateKey){
+        diaryMap[e.dateKey] = e;
+      }
+    });
+
+    // 로컬 시간 기준 오늘 키 (ISO split은 UTC라 한국 시간과 다를 수 있음)
+    const now = new Date();
+    const todayKey = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+    const firstDow = new Date(year, month, 1).getDay();  // 0=일
+    const lastDate = new Date(year, month+1, 0).getDate();
+
+    let html = '';
+    // 앞 빈 칸
+    for(let i = 0; i < firstDow; i++){
+      html += `<div class="cal-day other-month"></div>`;
+    }
+    // 날짜 칸
+    for(let d = 1; d <= lastDate; d++){
+      const dk  = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const ent = diaryMap[dk];
+      const dow = new Date(year, month, d).getDay();
+      let cls   = 'cal-day';
+      if(ent)                   cls += ' has-diary clickable';
+      if(dk === todayKey)       cls += ' today';
+      if(dk === selectedDayKey) cls += ' selected';
+      if(dow === 0)             cls += ' sunday';
+      if(dow === 6)             cls += ' saturday';
+
+      let emosHtml = '';
+      if(ent){
+        const all = [...(ent.posEm||[]), ...(ent.negEm||[])].slice(0,3);
+        if(all.length) emosHtml = `<div class="cal-day-emo">${all.map(em=>EM_MAP[em]||'').join('')}</div>`;
+      }
+      html += `<div class="${cls}" ${ent?`onclick="clickCalDay('${dk}')"`:''}>
+        <div class="cal-day-num">${d}</div>${emosHtml}
+      </div>`;
+    }
+    const daysEl = document.getElementById('cal-days');
+    if(daysEl) daysEl.innerHTML = html;
+  } catch(err) {
+    console.error('renderCalendar error:', err);
+  }
+}
+
+function clickCalDay(dateKey){
+  // 같은 날 재클릭 시 닫기
+  if(selectedDayKey === dateKey){
+    selectedDayKey = null;
+    document.getElementById('cal-detail').classList.remove('on');
+    renderCalendar();
     return;
   }
-  el.innerHTML = history.slice(0,30).map((e,i)=> buildHistItem(e,i)).join('');
+  selectedDayKey = dateKey;
+  renderCalendar();
+
+  const e = history.find(h => h.dateKey === dateKey);
+  if(!e) return;
+
+  document.getElementById('cal-detail-date').textContent = e.date || dateKey;
+  const condEl = document.getElementById('cal-detail-cond');
+  condEl.textContent = e.cond || '';
+  condEl.style.display = e.cond ? '' : 'none';
+  document.getElementById('cal-detail-body').innerHTML = buildDiaryDetailBody(e);
+
+  const detail = document.getElementById('cal-detail');
+  detail.classList.add('on');
+  setTimeout(()=> detail.scrollIntoView({behavior:'smooth', block:'nearest'}), 60);
+}
+
+function closeCalDetail(){
+  selectedDayKey = null;
+  document.getElementById('cal-detail').classList.remove('on');
+  renderCalendar();
+}
+
+function buildDiaryDetailBody(e){
+  let html = '';
+  const D = (key, val) => val
+    ? `<div class="detail-row"><span class="detail-key">${key}</span><span class="detail-val">${esc(val)}</span></div>`
+    : '';
+
+  // 감정
+  if((e.posEm||[]).length || (e.negEm||[]).length){
+    let chips = '';
+    (e.posEm||[]).forEach(em=>{ chips+=`<span class="detail-em-chip pos">${EM_MAP[em]||''} ${em}</span>`; });
+    (e.negEm||[]).forEach(em=>{ chips+=`<span class="detail-em-chip neg">${EM_MAP[em]||''} ${em}</span>`; });
+    html += `<div class="detail-section">
+      <div class="detail-section-title">감정</div>
+      <div class="detail-em-row">${chips}</div>`;
+    if(e.posEm?.length){
+      html += D('긍정 점수', e.posScore ? e.posScore+'/10' : null);
+      html += D('긍정 이유', e.posReason);
+    }
+    if(e.negEm?.length){
+      html += D('부정 점수', e.negScore ? e.negScore+'/10' : null);
+      html += D('부정 이유', e.negReason);
+    }
+    html += '</div>';
+  }
+  // 하루
+  if(e.gratPerson||e.healing||e.wish){
+    html += `<div class="detail-section"><div class="detail-section-title">오늘 하루</div>`;
+    if(e.gratPerson) html += D('고마운 사람', e.gratPerson + (e.gratReason?' — '+e.gratReason:''));
+    html += D('오늘의 힐링', e.healing);
+    html += D('하고 싶었던 일', e.wish);
+    html += '</div>';
+  }
+  // 감사
+  if(e.thanks3){
+    const lines = e.thanks3.trim().split('\n').filter(l=>l.trim());
+    html += `<div class="detail-section"><div class="detail-section-title">감사한 일 3가지</div>`;
+    lines.forEach(l=>{ html+=`<div class="thanks-item">${esc(l)}</div>`; });
+    html += '</div>';
+  }
+  // 자기돌봄
+  if(e.praise||e.regret){
+    html += `<div class="detail-section"><div class="detail-section-title">자기 돌봄</div>`;
+    html += D('나에게 칭찬 🌸', e.praise);
+    html += D('아쉬웠던 점', e.regret);
+    html += '</div>';
+  }
+  // 말씀
+  if(e.verse){
+    const vObj = VERSES.find(v=>v.r===e.verse);
+    html += `<div style="margin-top:10px;background:linear-gradient(135deg,#e8f0fd 0%,#d4e6ff 100%);border:1px solid var(--purple-mid);border-radius:var(--radius-sm);padding:12px 14px;position:relative;overflow:hidden;">
+      <div style="position:absolute;top:-8px;left:8px;font-size:48px;color:rgba(153,187,245,0.4);font-family:'Noto Serif KR',serif;line-height:1;">"</div>
+      ${vObj?`<div style="font-family:'Noto Serif KR',serif;font-size:12px;color:#0047b3;line-height:1.8;padding-top:10px;position:relative;">${esc(vObj.t)}</div>`:''}
+      <div style="font-size:11px;font-weight:700;color:var(--purple);margin-top:6px;text-align:right;">📖 ${esc(e.verse)}</div>
+    </div>`;
+  }
+  return html || '<div style="color:var(--text2);font-size:13px">저장된 내용이 없어요</div>';
 }
 
 function buildHistItem(e, i){
@@ -1637,10 +1809,9 @@ function toggleHist(i){
 }
 
 function updateStats(){
-  document.getElementById('s-days').textContent=history.length;
-  document.getElementById('s-prayers').textContent=prayers.length;
-  document.getElementById('s-ans').textContent=prayers.filter(p=>p.status==='answered').length;
-  document.getElementById('s-praying').textContent=prayers.filter(p=>p.status==='praying').length;
+  // 기도 통계는 기도 탭 내부에서만 사용
+  // 일기 통계는 달력이 직접 렌더링
+  if(document.getElementById('pg-hist').classList.contains('on')) renderCalendar();
 }
 
 function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
