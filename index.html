@@ -37,6 +37,9 @@ if ('serviceWorker' in navigator) {
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
+<!-- Tesseract.js OCR -->
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
 <style>
 :root {
@@ -513,6 +516,54 @@ img.emoji { width: 40px; height: 40px; vertical-align: middle; }
 .sermon-detail-label { font-size: 10px; font-weight: 700; color: var(--purple); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 3px; }
 .sermon-detail-val { font-size: 13px; color: var(--text); line-height: 1.7; white-space: pre-wrap; }
 
+/* ── OCR ── */
+.ocr-btn-wrap { margin-bottom: 10px; }
+.btn-ocr {
+  width: 100%; padding: 10px; border-radius: var(--radius-sm);
+  background: #f0f7ff; color: var(--purple); border: 1px solid var(--purple-mid);
+  font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  transition: background .15s;
+}
+.btn-ocr:active { background: var(--purple-light); }
+.btn-ocr:disabled { opacity: .5; cursor: not-allowed; }
+.ocr-status {
+  font-size: 12px; color: var(--text2); margin-top: 6px;
+  padding: 7px 10px; background: var(--bg); border-radius: var(--radius-sm);
+  border-left: 3px solid var(--purple-mid); line-height: 1.5;
+  display: none;
+}
+
+/* ── 사진 썸네일 ── */
+.sermon-thumb {
+  width: 100%; max-height: 140px; object-fit: cover;
+  border-radius: var(--radius-sm); cursor: pointer;
+  border: 1px solid var(--border); margin-bottom: 10px;
+  display: block; transition: opacity .15s;
+}
+.sermon-thumb:active { opacity: .8; }
+
+/* ── 이미지 전체보기 ── */
+#img-viewer {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0,0,0,0.92);
+  display: none; align-items: center; justify-content: center;
+  padding: 20px;
+}
+#img-viewer.on { display: flex; }
+#img-viewer-img {
+  max-width: 100%; max-height: 90vh;
+  object-fit: contain; border-radius: 8px;
+  touch-action: pinch-zoom;
+}
+#img-viewer-close {
+  position: absolute; top: 16px; right: 16px;
+  background: rgba(255,255,255,0.2); border: none; color: white;
+  border-radius: 50%; width: 36px; height: 36px;
+  font-size: 20px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+
 /* ── PHOTO PREVIEW ── */
 .photo-preview-wrap {
   position: relative; margin-bottom: 14px; display: none;
@@ -861,6 +912,12 @@ img.emoji { width: 40px; height: 40px; vertical-align: middle; }
         <img class="photo-preview-img" id="sermon-photo-img" src="" alt="참고 사진">
         <button class="photo-preview-close" onclick="closeSermonPhoto()" aria-label="닫기">✕</button>
       </div>
+      <div class="ocr-btn-wrap" id="ocr-btn-wrap" style="display:none">
+        <button class="btn-ocr" id="ocr-btn" onclick="recognizeText()">
+          ✨ 글씨 인식하기 (OCR)
+        </button>
+        <div class="ocr-status" id="ocr-status"></div>
+      </div>
       <div class="sermon-form-grid">
         <div>
           <div class="field-lbl">날짜</div>
@@ -916,6 +973,12 @@ img.emoji { width: 40px; height: 40px; vertical-align: middle; }
 
 </div><!-- /app -->
 
+<!-- 이미지 전체보기 뷰어 -->
+<div id="img-viewer" onclick="closeImgViewer()">
+  <img id="img-viewer-img" src="" alt="사진 전체보기">
+  <button id="img-viewer-close" onclick="closeImgViewer()" aria-label="닫기">✕</button>
+</div>
+
 
 <script>
 // ══════════════════════════════════════════════
@@ -934,13 +997,14 @@ const firebaseConfig = {
 // ══════════════════════════════════════════════
 
 // ── Firebase 초기화 ──
-let auth, db;
+let auth, db, storage;
 let currentUser = null;
 const firebaseReady = (function(){
   try {
     firebase.initializeApp(firebaseConfig);
-    auth = firebase.auth();
-    db   = firebase.firestore();
+    auth    = firebase.auth();
+    db      = firebase.firestore();
+    storage = firebase.storage();
     db.enablePersistence({ synchronizeTabs: true }).catch(()=>{});
     return true;
   } catch(e) {
@@ -979,6 +1043,7 @@ let selPosArr = [], selNegArr = [], condVal = '';
 let prayers = [], history = [], savedVerses = [], sermonNotes = [];
 let calendarDate = new Date();   // 현재 보고 있는 월
 let selectedDayKey = null;       // 선택된 날짜 키
+let currentPhotoFile = null;     // 업로드할 사진 파일
 
 // ── 로컬 fallback 스토리지 ──
 const LS = {
@@ -1273,10 +1338,13 @@ function renderSavedVerses(){
 function onSermonPhotoSelected(event){
   const file = event.target.files[0];
   if(!file) return;
+  currentPhotoFile = file;
   const url = URL.createObjectURL(file);
   document.getElementById('sermon-photo-img').src = url;
   document.getElementById('sermon-photo-wrap').classList.add('on');
-  // 사진 아래 날짜 입력 필드로 스크롤
+  document.getElementById('ocr-btn-wrap').style.display = 'block';
+  document.getElementById('ocr-status').style.display = 'none';
+  document.getElementById('ocr-status').style.color = '';
   document.getElementById('sn-date').scrollIntoView({behavior:'smooth', block:'center'});
 }
 
@@ -1286,7 +1354,75 @@ function closeSermonPhoto(){
   wrap.classList.remove('on');
   URL.revokeObjectURL(img.src);
   img.src = '';
+  currentPhotoFile = null;
   document.getElementById('sermon-photo-input').value = '';
+  document.getElementById('ocr-btn-wrap').style.display = 'none';
+  document.getElementById('ocr-status').style.display = 'none';
+}
+
+// ── OCR 텍스트 인식 ──
+async function recognizeText(){
+  const img    = document.getElementById('sermon-photo-img');
+  const btn    = document.getElementById('ocr-btn');
+  const status = document.getElementById('ocr-status');
+  if(!img.src || img.src === window.location.href) return;
+
+  btn.disabled = true;
+  status.style.display = 'block';
+  status.style.color   = '';
+  status.textContent   = '글씨 인식 준비 중...';
+
+  try {
+    const result = await Tesseract.recognize(img.src, 'kor+eng', {
+      logger: m => {
+        if(m.status === 'recognizing text'){
+          status.textContent = `글씨 인식 중... ${Math.round((m.progress||0)*100)}%`;
+        } else if(m.status === 'loading tesseract core' || m.status === 'initializing tesseract'){
+          status.textContent = '인식 엔진 초기화 중...';
+        }
+      }
+    });
+    const text = (result.data.text || '').trim();
+    if(text){
+      document.getElementById('sn-content').value = text;
+      status.textContent = '✅ 인식 완료! 내용을 확인하고 수정해주세요.';
+      status.style.color = '#1D9E75';
+    } else {
+      status.textContent = '텍스트를 인식하지 못했어요. 사진이 선명한지 확인해주세요.';
+      status.style.color = '#e53935';
+    }
+  } catch(e) {
+    console.error('OCR error:', e);
+    status.textContent = '인식에 실패했어요. 다시 시도해주세요.';
+    status.style.color = '#e53935';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ── Firebase Storage 사진 업로드 ──
+async function uploadSermonPhoto(){
+  if(!currentPhotoFile || !firebaseReady || !uid()) return null;
+  try {
+    const ext  = currentPhotoFile.type.includes('png') ? 'png' : 'jpg';
+    const path = `users/${uid()}/sermonNotes/${Date.now()}.${ext}`;
+    const ref  = storage.ref(path);
+    await ref.put(currentPhotoFile);
+    return await ref.getDownloadURL();
+  } catch(e) {
+    console.warn('Photo upload failed:', e);
+    return null;
+  }
+}
+
+// ── 이미지 전체보기 ──
+function viewSermonPhoto(url){
+  document.getElementById('img-viewer-img').src = url;
+  document.getElementById('img-viewer').classList.add('on');
+}
+function closeImgViewer(){
+  document.getElementById('img-viewer').classList.remove('on');
+  document.getElementById('img-viewer-img').src = '';
 }
 
 // ── 설교 기록 ──
@@ -1297,15 +1433,27 @@ async function saveSermonNote(){
   const content = document.getElementById('sn-content').value.trim();
   const apply   = document.getElementById('sn-apply').value.trim();
   if(!title && !content){ alert('제목 또는 내용을 입력해주세요.'); return; }
-  const note={id:Date.now().toString(), title, ref, date, content, apply,
-    savedAt:new Date().toISOString()};
+
+  // 사진이 있으면 Storage 업로드
+  const saveBtn = document.querySelector('#pg-sermon .btn-purple');
+  if(saveBtn) saveBtn.textContent = '저장 중...';
+  const imageUrl = await uploadSermonPhoto();
+
+  const note = {
+    id: Date.now().toString(), title, ref, date, content, apply,
+    imageUrl: imageUrl || null,
+    savedAt: new Date().toISOString()
+  };
   sermonNotes.unshift(note);
   await fsSaveSermonNote(note);
-  // 폼 초기화
+
+  // 폼 + 사진 초기화
   ['sn-title','sn-ref','sn-content','sn-apply'].forEach(id=>{
     document.getElementById(id).value='';
   });
-  document.getElementById('sn-date').value=new Date().toISOString().split('T')[0];
+  document.getElementById('sn-date').value = new Date().toISOString().split('T')[0];
+  closeSermonPhoto();
+  if(saveBtn) saveBtn.textContent = '💾 기록 저장';
   renderSermonNotes();
   alert('말씀 기록이 저장되었어요 📖');
 }
@@ -1337,12 +1485,16 @@ function renderSermonNotes(){
       <div class="sermon-note-header" onclick="toggleSermonNote('${n.id}')">
         <div class="sermon-note-summary">
           <div class="sermon-note-title">${esc(n.title)||'(제목 없음)'}</div>
-          <div class="sermon-note-sub">${n.date||''} ${n.ref?'· '+esc(n.ref):''}</div>
+          <div class="sermon-note-sub">
+            ${n.date||''} ${n.ref?'· '+esc(n.ref):''}
+            ${n.imageUrl?'· 📷':''}
+          </div>
         </div>
         <button class="pdel" onclick="event.stopPropagation();deleteSermonNote('${n.id}')" aria-label="삭제" style="margin-right:4px">×</button>
         <div class="sermon-chevron">▾</div>
       </div>
       <div class="sermon-note-detail">
+        ${n.imageUrl?`<img src="${n.imageUrl}" class="sermon-thumb" onclick="event.stopPropagation();viewSermonPhoto('${n.imageUrl}')" alt="첨부 사진">`:''}
         ${n.content?`<div class="sermon-detail-row"><div class="sermon-detail-label">말씀 / 은혜</div><div class="sermon-detail-val">${esc(n.content)}</div></div>`:''}
         ${n.apply?`<div class="sermon-detail-row"><div class="sermon-detail-label">적용할 점</div><div class="sermon-detail-val">${esc(n.apply)}</div></div>`:''}
       </div>
