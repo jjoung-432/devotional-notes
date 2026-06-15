@@ -545,16 +545,19 @@ img.emoji { width: 40px; height: 40px; vertical-align: middle; }
 /* ── 이미지 전체보기 ── */
 #img-viewer {
   position: fixed; inset: 0; z-index: 9999;
-  background: rgba(0,0,0,0.92);
+  background: rgba(0,0,0,0.9);
   display: none; align-items: center; justify-content: center;
-  padding: 20px;
+  cursor: zoom-out;
 }
 #img-viewer.on { display: flex; }
 #img-viewer-img {
-  max-width: 95vw; max-height: 90vh;
-  object-fit: contain; border-radius: 8px;
+  max-width: 100vw; max-height: 100vh;
+  object-fit: contain;
   touch-action: pinch-zoom;
   user-select: none;
+  cursor: default;
+  transition: transform .25s ease;
+  transform-origin: center center;
 }
 
 /* ── 말씀기록 수정 모드 ── */
@@ -1458,7 +1461,21 @@ async function recognizeText(){
   }
 }
 
-// ── 사진 압축 → base64 변환 (최대 800px, JPEG 0.6) ──
+// ── 사진 압축 → base64 변환 ──
+// 기본: 최대 1200px / 품질 0.8
+// 1MB 초과 시: 1000px / 품질 0.7 로 재압축
+function resizeToBase64(img, maxPx, quality){
+  let w = img.width, h = img.height;
+  if(w > maxPx || h > maxPx){
+    if(w > h){ h = Math.round(h * maxPx / w); w = maxPx; }
+    else      { w = Math.round(w * maxPx / h); h = maxPx; }
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+  return canvas.toDataURL('image/jpeg', quality);
+}
+
 function compressPhotoToBase64(file){
   return new Promise((resolve) => {
     if(!file){ resolve(null); return; }
@@ -1466,16 +1483,12 @@ function compressPhotoToBase64(file){
     reader.onload = (e) => {
       const img = new Image();
       img.onload = () => {
-        const MAX = 800;
-        let w = img.width, h = img.height;
-        if(w > MAX || h > MAX){
-          if(w > h){ h = Math.round(h * MAX / w); w = MAX; }
-          else      { w = Math.round(w * MAX / h); h = MAX; }
+        let data = resizeToBase64(img, 1200, 0.8);
+        // base64 길이 × 0.75 ≈ 실제 바이트 수
+        if(data.length * 0.75 > 1024 * 1024){
+          data = resizeToBase64(img, 1000, 0.7);
         }
-        const canvas = document.createElement('canvas');
-        canvas.width = w; canvas.height = h;
-        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL('image/jpeg', 0.6));
+        resolve(data);
       };
       img.onerror = () => resolve(null);
       img.src = e.target.result;
@@ -1486,14 +1499,46 @@ function compressPhotoToBase64(file){
 }
 
 // ── 이미지 전체보기 ──
+let _imgZoomed = false;
+let _imgLastTap = 0;
+
 function viewSermonPhoto(url){
-  document.getElementById('img-viewer-img').src = url;
-  document.getElementById('img-viewer').classList.add('on');
+  const viewer = document.getElementById('img-viewer');
+  const img    = document.getElementById('img-viewer-img');
+  img.src = url;
+  _imgZoomed = false;
+  img.style.transform = 'scale(1)';
+  viewer.classList.add('on');
 }
+
 function closeImgViewer(){
-  document.getElementById('img-viewer').classList.remove('on');
-  document.getElementById('img-viewer-img').src = '';
+  const viewer = document.getElementById('img-viewer');
+  const img    = document.getElementById('img-viewer-img');
+  viewer.classList.remove('on');
+  img.src = '';
+  img.style.transform = 'scale(1)';
+  _imgZoomed = false;
 }
+
+// 더블탭 줌 토글
+document.addEventListener('DOMContentLoaded', () => {
+  const img = document.getElementById('img-viewer-img');
+  if(!img) return;
+  img.addEventListener('touchend', (e) => {
+    const now = Date.now();
+    if(now - _imgLastTap < 300){
+      e.preventDefault();
+      _imgZoomed = !_imgZoomed;
+      img.style.transform = _imgZoomed ? 'scale(2)' : 'scale(1)';
+    }
+    _imgLastTap = now;
+  }, { passive: false });
+
+  // 뷰어 배경 클릭 시 닫기 (이미지 자체 클릭은 제외)
+  document.getElementById('img-viewer').addEventListener('click', (e) => {
+    if(e.target === document.getElementById('img-viewer')) closeImgViewer();
+  });
+});
 
 // ── 설교 기록 ──
 async function saveSermonNote(){
