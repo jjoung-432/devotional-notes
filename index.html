@@ -551,9 +551,38 @@ img.emoji { width: 40px; height: 40px; vertical-align: middle; }
 }
 #img-viewer.on { display: flex; }
 #img-viewer-img {
-  max-width: 100%; max-height: 90vh;
+  max-width: 95vw; max-height: 90vh;
   object-fit: contain; border-radius: 8px;
   touch-action: pinch-zoom;
+  user-select: none;
+}
+
+/* ── 말씀기록 수정 모드 ── */
+.sermon-note-item.editing {
+  background: var(--purple-light);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  margin: 0 -2px;
+  border-bottom: none !important;
+}
+.sermon-edit-field {
+  width: 100%; padding: 9px 11px; margin-bottom: 7px;
+  border: 1px solid var(--purple-mid); border-radius: var(--radius-sm);
+  font-size: 13px; background: white; font-family: inherit; color: var(--text);
+}
+.sermon-edit-field:focus { outline: none; border-color: var(--purple); }
+.sermon-edit-textarea {
+  width: 100%; resize: vertical; padding: 9px 11px; margin-bottom: 7px;
+  border: 1px solid var(--purple-mid); border-radius: var(--radius-sm);
+  font-size: 13px; line-height: 1.6; background: white; font-family: inherit; color: var(--text);
+}
+.sermon-edit-textarea:focus { outline: none; border-color: var(--purple); }
+.sermon-edit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 7px; }
+.sermon-edit-grid .field-lbl { margin-top: 0; }
+.sermon-edit-thumb {
+  width: 100%; max-height: 100px; object-fit: cover;
+  border-radius: var(--radius-sm); margin-bottom: 8px; cursor: pointer;
+  border: 1px solid var(--border);
 }
 #img-viewer-close {
   position: absolute; top: 16px; right: 16px;
@@ -923,12 +952,20 @@ img.emoji { width: 40px; height: 40px; vertical-align: middle; }
           <input type="date" id="sn-date" style="width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;background:var(--bg);font-family:inherit;color:var(--text)">
         </div>
         <div>
+          <div class="field-lbl">설교자</div>
+          <input type="text" id="sn-preacher" placeholder="설교자 이름">
+        </div>
+      </div>
+      <div class="sermon-form-grid">
+        <div>
+          <div class="field-lbl">설교 제목</div>
+          <input type="text" id="sn-title" placeholder="오늘 들은 설교 제목">
+        </div>
+        <div>
           <div class="field-lbl">성경 본문</div>
           <input type="text" id="sn-ref" placeholder="예: 요한복음 3:16">
         </div>
       </div>
-      <div class="field-lbl">설교 제목</div>
-      <input type="text" id="sn-title" placeholder="오늘 들은 설교 제목">
       <div class="field-lbl">말씀 내용 / 은혜받은 내용</div>
       <textarea id="sn-content" placeholder="말씀에서 받은 은혜, 깨달음을 적어보세요..." style="min-height:100px"></textarea>
       <div class="field-lbl">적용할 점</div>
@@ -1042,6 +1079,8 @@ let prayers = [], history = [], savedVerses = [], sermonNotes = [];
 let calendarDate = new Date();   // 현재 보고 있는 월
 let selectedDayKey = null;       // 선택된 날짜 키
 let currentPhotoFile = null;     // 업로드할 사진 파일
+let editingSermonId  = null;     // 수정 중인 말씀기록 ID
+let currentEditPhotoFile = null; // 수정 중 교체할 사진 파일
 
 // ── 로컬 fallback 스토리지 ──
 const LS = {
@@ -1358,6 +1397,25 @@ function closeSermonPhoto(){
   document.getElementById('ocr-status').style.display = 'none';
 }
 
+// ── OCR 전처리: 흑백 + 대비 강화 ──
+function preprocessForOCR(srcImg){
+  const cw = srcImg.naturalWidth  || srcImg.width  || 800;
+  const ch = srcImg.naturalHeight || srcImg.height || 800;
+  const canvas = document.createElement('canvas');
+  canvas.width = cw; canvas.height = ch;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(srcImg, 0, 0, cw, ch);
+  const id = ctx.getImageData(0, 0, cw, ch);
+  const d  = id.data;
+  for(let i = 0; i < d.length; i += 4){
+    const g = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];  // 그레이스케일
+    const e = Math.min(255, Math.max(0, (g - 128) * 1.6 + 128)); // 대비 1.6배
+    d[i] = d[i+1] = d[i+2] = e;
+  }
+  ctx.putImageData(id, 0, 0);
+  return canvas.toDataURL('image/jpeg', 0.95);
+}
+
 // ── OCR 텍스트 인식 ──
 async function recognizeText(){
   const img    = document.getElementById('sermon-photo-img');
@@ -1368,14 +1426,16 @@ async function recognizeText(){
   btn.disabled = true;
   status.style.display = 'block';
   status.style.color   = '';
-  status.textContent   = '글씨 인식 준비 중...';
+  status.textContent   = '이미지 전처리 중...';
 
   try {
-    const result = await Tesseract.recognize(img.src, 'kor+eng', {
+    const processedSrc = preprocessForOCR(img);
+    const result = await Tesseract.recognize(processedSrc, 'kor', {
+      tessedit_pageseg_mode: 6,   // PSM 6: 균일한 텍스트 블록
       logger: m => {
         if(m.status === 'recognizing text'){
           status.textContent = `글씨 인식 중... ${Math.round((m.progress||0)*100)}%`;
-        } else if(m.status === 'loading tesseract core' || m.status === 'initializing tesseract'){
+        } else if(m.status.includes('loading') || m.status.includes('initializing')){
           status.textContent = '인식 엔진 초기화 중...';
         }
       }
@@ -1383,7 +1443,7 @@ async function recognizeText(){
     const text = (result.data.text || '').trim();
     if(text){
       document.getElementById('sn-content').value = text;
-      status.textContent = '✅ 인식 완료! 내용을 확인하고 수정해주세요.';
+      status.textContent = 'AI 인식이 부정확할 수 있어요. 사진을 보면서 직접 수정해주세요 ✏️';
       status.style.color = '#1D9E75';
     } else {
       status.textContent = '텍스트를 인식하지 못했어요. 사진이 선명한지 확인해주세요.';
@@ -1437,28 +1497,27 @@ function closeImgViewer(){
 
 // ── 설교 기록 ──
 async function saveSermonNote(){
-  const title   = document.getElementById('sn-title').value.trim();
-  const ref     = document.getElementById('sn-ref').value.trim();
-  const date    = document.getElementById('sn-date').value;
-  const content = document.getElementById('sn-content').value.trim();
-  const apply   = document.getElementById('sn-apply').value.trim();
+  const title    = document.getElementById('sn-title').value.trim();
+  const ref      = document.getElementById('sn-ref').value.trim();
+  const date     = document.getElementById('sn-date').value;
+  const preacher = document.getElementById('sn-preacher').value.trim();
+  const content  = document.getElementById('sn-content').value.trim();
+  const apply    = document.getElementById('sn-apply').value.trim();
   if(!title && !content){ alert('제목 또는 내용을 입력해주세요.'); return; }
 
-  // 사진이 있으면 canvas로 압축 → base64
   const saveBtn = document.querySelector('#pg-sermon .btn-purple');
   if(saveBtn) saveBtn.textContent = '저장 중...';
   const imageData = await compressPhotoToBase64(currentPhotoFile);
 
   const note = {
-    id: Date.now().toString(), title, ref, date, content, apply,
-    imageData: imageData || null,
+    id: Date.now().toString(), title, ref, date, preacher,
+    content, apply, imageData: imageData || null,
     savedAt: new Date().toISOString()
   };
   sermonNotes.unshift(note);
   await fsSaveSermonNote(note);
 
-  // 폼 + 사진 초기화
-  ['sn-title','sn-ref','sn-content','sn-apply'].forEach(id=>{
+  ['sn-title','sn-ref','sn-content','sn-apply','sn-preacher'].forEach(id=>{
     document.getElementById(id).value='';
   });
   document.getElementById('sn-date').value = new Date().toISOString().split('T')[0];
@@ -1473,6 +1532,51 @@ async function deleteSermonNote(id){
   sermonNotes=sermonNotes.filter(n=>n.id!==id);
   await fsDeleteSermonNote(id);
   renderSermonNotes();
+}
+
+function editSermonNote(id){
+  editingSermonId = id;
+  currentEditPhotoFile = null;
+  renderSermonNotes();
+  // 수정 폼 첫 필드로 포커스
+  setTimeout(()=>{
+    const el = document.getElementById('se-title-'+id);
+    if(el){ el.focus(); }
+  }, 60);
+}
+
+function cancelEditSermon(){
+  editingSermonId = null;
+  currentEditPhotoFile = null;
+  renderSermonNotes();
+}
+
+async function saveEditSermon(id){
+  const n = sermonNotes.find(x=>x.id===id);
+  if(!n) return;
+  const v = (eid) => (document.getElementById(eid)?.value||'').trim();
+  n.title    = v('se-title-'+id);
+  n.ref      = v('se-ref-'+id);
+  n.date     = document.getElementById('se-date-'+id)?.value || n.date;
+  n.preacher = v('se-preacher-'+id);
+  n.content  = v('se-content-'+id);
+  n.apply    = v('se-apply-'+id);
+  if(currentEditPhotoFile){
+    n.imageData = await compressPhotoToBase64(currentEditPhotoFile);
+  }
+  await fsSaveSermonNote(n);
+  editingSermonId = null;
+  currentEditPhotoFile = null;
+  renderSermonNotes();
+}
+
+function onEditPhotoSelected(id, event){
+  const file = event.target.files[0];
+  if(!file) return;
+  currentEditPhotoFile = file;
+  // 썸네일 미리보기 업데이트
+  const thumb = document.getElementById('se-thumb-'+id);
+  if(thumb){ thumb.src = URL.createObjectURL(file); }
 }
 
 function toggleSermonNote(id){
@@ -1490,25 +1594,67 @@ function renderSermonNotes(){
   }
   if(empty) empty.style.display='none';
   if(el) el.style.display='block';
-  el.innerHTML=sermonNotes.map(n=>`
-    <div class="sermon-note-item" id="sn-${n.id}">
+  el.innerHTML=sermonNotes.map(n=>{
+    const isEditing = editingSermonId === n.id;
+
+    if(isEditing){
+      return `<div class="sermon-note-item editing" id="sn-${n.id}">
+        <div class="field-lbl" style="margin-top:0;margin-bottom:5px;font-size:11px;color:var(--purple);font-weight:700">✏️ 말씀 기록 수정</div>
+        <div class="sermon-edit-grid">
+          <div>
+            <div class="field-lbl">날짜</div>
+            <input type="date" id="se-date-${n.id}" class="sermon-edit-field" value="${n.date||''}">
+          </div>
+          <div>
+            <div class="field-lbl">설교자</div>
+            <input type="text" id="se-preacher-${n.id}" class="sermon-edit-field" value="${esc(n.preacher||'')}" placeholder="설교자">
+          </div>
+        </div>
+        <div class="sermon-edit-grid">
+          <div>
+            <div class="field-lbl">설교 제목</div>
+            <input type="text" id="se-title-${n.id}" class="sermon-edit-field" value="${esc(n.title||'')}" placeholder="설교 제목">
+          </div>
+          <div>
+            <div class="field-lbl">성경 본문</div>
+            <input type="text" id="se-ref-${n.id}" class="sermon-edit-field" value="${esc(n.ref||'')}" placeholder="예: 요한복음 3:16">
+          </div>
+        </div>
+        <div class="field-lbl">말씀 / 은혜</div>
+        <textarea id="se-content-${n.id}" class="sermon-edit-textarea" style="min-height:80px">${esc(n.content||'')}</textarea>
+        <div class="field-lbl">적용할 점</div>
+        <textarea id="se-apply-${n.id}" class="sermon-edit-textarea" style="min-height:52px">${esc(n.apply||'')}</textarea>
+        ${n.imageData?`<img id="se-thumb-${n.id}" src="${n.imageData}" class="sermon-edit-thumb" onclick="viewSermonPhoto('${n.imageData}')">`:
+          `<div id="se-thumb-${n.id}" style="display:none"></div>`}
+        <input type="file" id="se-photo-${n.id}" accept="image/*" style="display:none" onchange="onEditPhotoSelected('${n.id}',event)">
+        <button class="btn-outline" style="margin-bottom:10px;margin-top:2px" onclick="document.getElementById('se-photo-${n.id}').click()">📷 사진 교체</button>
+        <div class="prayer-edit-actions">
+          <button class="btn-edit-save"   onclick="saveEditSermon('${n.id}')">✓ 저장</button>
+          <button class="btn-edit-cancel" onclick="cancelEditSermon()">✕ 취소</button>
+        </div>
+      </div>`;
+    }
+
+    return `<div class="sermon-note-item" id="sn-${n.id}">
       <div class="sermon-note-header" onclick="toggleSermonNote('${n.id}')">
         <div class="sermon-note-summary">
           <div class="sermon-note-title">${esc(n.title)||'(제목 없음)'}</div>
           <div class="sermon-note-sub">
-            ${n.date||''} ${n.ref?'· '+esc(n.ref):''}
-            ${n.imageData?'· 📷':''}
+            ${n.date||''}${n.preacher?' · '+esc(n.preacher):''}${n.ref?' · '+esc(n.ref):''}${n.imageData?' · 📷':''}
           </div>
         </div>
-        <button class="pdel" onclick="event.stopPropagation();deleteSermonNote('${n.id}')" aria-label="삭제" style="margin-right:4px">×</button>
+        <button class="pedit" onclick="event.stopPropagation();editSermonNote('${n.id}')" aria-label="수정" style="margin-right:2px">✏️</button>
+        <button class="pdel"  onclick="event.stopPropagation();deleteSermonNote('${n.id}')" aria-label="삭제" style="margin-right:4px">×</button>
         <div class="sermon-chevron">▾</div>
       </div>
       <div class="sermon-note-detail">
         ${n.imageData?`<img src="${n.imageData}" class="sermon-thumb" onclick="event.stopPropagation();viewSermonPhoto('${n.imageData}')" alt="첨부 사진">`:''}
+        ${n.preacher?`<div class="sermon-detail-row"><div class="sermon-detail-label">설교자</div><div class="sermon-detail-val">${esc(n.preacher)}</div></div>`:''}
         ${n.content?`<div class="sermon-detail-row"><div class="sermon-detail-label">말씀 / 은혜</div><div class="sermon-detail-val">${esc(n.content)}</div></div>`:''}
         ${n.apply?`<div class="sermon-detail-row"><div class="sermon-detail-label">적용할 점</div><div class="sermon-detail-val">${esc(n.apply)}</div></div>`:''}
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 // ── 탭 전환 ──
