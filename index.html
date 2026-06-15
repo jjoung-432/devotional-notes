@@ -37,7 +37,6 @@ if ('serviceWorker' in navigator) {
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
 <!-- Tesseract.js OCR -->
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
@@ -997,14 +996,13 @@ const firebaseConfig = {
 // ══════════════════════════════════════════════
 
 // ── Firebase 초기화 ──
-let auth, db, storage;
+let auth, db;
 let currentUser = null;
 const firebaseReady = (function(){
   try {
     firebase.initializeApp(firebaseConfig);
-    auth    = firebase.auth();
-    db      = firebase.firestore();
-    storage = firebase.storage();
+    auth = firebase.auth();
+    db   = firebase.firestore();
     db.enablePersistence({ synchronizeTabs: true }).catch(()=>{});
     return true;
   } catch(e) {
@@ -1400,19 +1398,31 @@ async function recognizeText(){
   }
 }
 
-// ── Firebase Storage 사진 업로드 ──
-async function uploadSermonPhoto(){
-  if(!currentPhotoFile || !firebaseReady || !uid()) return null;
-  try {
-    const ext  = currentPhotoFile.type.includes('png') ? 'png' : 'jpg';
-    const path = `users/${uid()}/sermonNotes/${Date.now()}.${ext}`;
-    const ref  = storage.ref(path);
-    await ref.put(currentPhotoFile);
-    return await ref.getDownloadURL();
-  } catch(e) {
-    console.warn('Photo upload failed:', e);
-    return null;
-  }
+// ── 사진 압축 → base64 변환 (최대 800px, JPEG 0.6) ──
+function compressPhotoToBase64(file){
+  return new Promise((resolve) => {
+    if(!file){ resolve(null); return; }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 800;
+        let w = img.width, h = img.height;
+        if(w > MAX || h > MAX){
+          if(w > h){ h = Math.round(h * MAX / w); w = MAX; }
+          else      { w = Math.round(w * MAX / h); h = MAX; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', 0.6));
+      };
+      img.onerror = () => resolve(null);
+      img.src = e.target.result;
+    };
+    reader.onerror = () => resolve(null);
+    reader.readAsDataURL(file);
+  });
 }
 
 // ── 이미지 전체보기 ──
@@ -1434,14 +1444,14 @@ async function saveSermonNote(){
   const apply   = document.getElementById('sn-apply').value.trim();
   if(!title && !content){ alert('제목 또는 내용을 입력해주세요.'); return; }
 
-  // 사진이 있으면 Storage 업로드
+  // 사진이 있으면 canvas로 압축 → base64
   const saveBtn = document.querySelector('#pg-sermon .btn-purple');
   if(saveBtn) saveBtn.textContent = '저장 중...';
-  const imageUrl = await uploadSermonPhoto();
+  const imageData = await compressPhotoToBase64(currentPhotoFile);
 
   const note = {
     id: Date.now().toString(), title, ref, date, content, apply,
-    imageUrl: imageUrl || null,
+    imageData: imageData || null,
     savedAt: new Date().toISOString()
   };
   sermonNotes.unshift(note);
@@ -1487,14 +1497,14 @@ function renderSermonNotes(){
           <div class="sermon-note-title">${esc(n.title)||'(제목 없음)'}</div>
           <div class="sermon-note-sub">
             ${n.date||''} ${n.ref?'· '+esc(n.ref):''}
-            ${n.imageUrl?'· 📷':''}
+            ${n.imageData?'· 📷':''}
           </div>
         </div>
         <button class="pdel" onclick="event.stopPropagation();deleteSermonNote('${n.id}')" aria-label="삭제" style="margin-right:4px">×</button>
         <div class="sermon-chevron">▾</div>
       </div>
       <div class="sermon-note-detail">
-        ${n.imageUrl?`<img src="${n.imageUrl}" class="sermon-thumb" onclick="event.stopPropagation();viewSermonPhoto('${n.imageUrl}')" alt="첨부 사진">`:''}
+        ${n.imageData?`<img src="${n.imageData}" class="sermon-thumb" onclick="event.stopPropagation();viewSermonPhoto('${n.imageData}')" alt="첨부 사진">`:''}
         ${n.content?`<div class="sermon-detail-row"><div class="sermon-detail-label">말씀 / 은혜</div><div class="sermon-detail-val">${esc(n.content)}</div></div>`:''}
         ${n.apply?`<div class="sermon-detail-row"><div class="sermon-detail-label">적용할 점</div><div class="sermon-detail-val">${esc(n.apply)}</div></div>`:''}
       </div>
