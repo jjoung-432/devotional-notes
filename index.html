@@ -1563,8 +1563,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const viewer = document.getElementById('img-viewer');
   const img    = document.getElementById('img-viewer-img');
 
-  /* ── 터치 이벤트 ── */
-  img.addEventListener('touchstart', e => {
+  /* ── 터치 이벤트 (viewer 전체에 등록 — 손가락 위치 무관하게 핀치 감지) ── */
+  viewer.addEventListener('touchstart', e => {
     e.preventDefault();
     if(e.touches.length === 1){
       const t   = e.touches[0];
@@ -1578,6 +1578,7 @@ document.addEventListener('DOMContentLoaded', () => {
       _iv.lastTap = now;
 
     } else if(e.touches.length === 2){
+      // 두 손가락 중 하나가 배경에 있어도 정상 감지
       _iv.isPanning = false;
       const t1 = e.touches[0], t2 = e.touches[1];
       _iv.pinchDist  = Math.hypot(t2.clientX-t1.clientX, t2.clientY-t1.clientY);
@@ -1589,11 +1590,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }, { passive:false });
 
-  img.addEventListener('touchmove', e => {
+  viewer.addEventListener('touchmove', e => {
     e.preventDefault();
     if(e.touches.length === 2){
       const t1 = e.touches[0], t2 = e.touches[1];
       const dist      = Math.hypot(t2.clientX-t1.clientX, t2.clientY-t1.clientY);
+      if(_iv.pinchDist === 0) return; // 초기화 전 방어
       const newScale  = Math.min(5, Math.max(1, _iv.pinchScale * dist / _iv.pinchDist));
       const r         = newScale / _iv.pinchScale;
       const vw = window.innerWidth, vh = window.innerHeight;
@@ -1611,7 +1613,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }, { passive:false });
 
-  img.addEventListener('touchend', e => {
+  viewer.addEventListener('touchend', e => {
     e.preventDefault();
     if(e.touches.length < 2) _iv.isPanning = false;
     if(e.touches.length === 1){
