@@ -37,8 +37,6 @@ if ('serviceWorker' in navigator) {
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-<!-- Tesseract.js OCR -->
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
 <style>
 :root {
@@ -523,23 +521,6 @@ img.emoji { width: 40px; height: 40px; vertical-align: middle; }
 }
 .photo-hint.on { display: block; }
 
-/* ── OCR ── */
-.ocr-btn-wrap { margin-bottom: 10px; }
-.btn-ocr {
-  width: 100%; padding: 10px; border-radius: var(--radius-sm);
-  background: #f0f7ff; color: var(--purple); border: 1px solid var(--purple-mid);
-  font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit;
-  display: flex; align-items: center; justify-content: center; gap: 6px;
-  transition: background .15s;
-}
-.btn-ocr:active { background: var(--purple-light); }
-.btn-ocr:disabled { opacity: .5; cursor: not-allowed; }
-.ocr-status {
-  font-size: 12px; color: var(--text2); margin-top: 6px;
-  padding: 7px 10px; background: var(--bg); border-radius: var(--radius-sm);
-  border-left: 3px solid var(--purple-mid); line-height: 1.6;
-  display: none;
-}
 
 /* ── 사진 썸네일 ── */
 .sermon-thumb {
@@ -962,12 +943,6 @@ img.emoji { width: 40px; height: 40px; vertical-align: middle; }
       </div>
       <div class="photo-hint" id="photo-hint">
         사진을 보면서 아래 내용을 직접 입력해주세요 ✏️
-      </div>
-      <div class="ocr-btn-wrap" id="ocr-btn-wrap" style="display:none">
-        <button class="btn-ocr" id="ocr-btn" onclick="recognizeText()">
-          ✨ 글씨 인식하기 (OCR)
-        </button>
-        <div class="ocr-status" id="ocr-status"></div>
       </div>
       <div class="sermon-form-grid">
         <div>
@@ -1404,9 +1379,6 @@ function onSermonPhotoSelected(event){
   document.getElementById('sermon-photo-img').src = url;
   document.getElementById('sermon-photo-wrap').classList.add('on');
   document.getElementById('photo-hint').classList.add('on');
-  document.getElementById('ocr-btn-wrap').style.display = 'block';
-  document.getElementById('ocr-status').style.display = 'none';
-  document.getElementById('ocr-status').style.color = '';
   document.getElementById('sn-date').scrollIntoView({behavior:'smooth', block:'center'});
 }
 
@@ -1419,84 +1391,8 @@ function closeSermonPhoto(){
   currentPhotoFile = null;
   document.getElementById('sermon-photo-input').value = '';
   document.getElementById('photo-hint').classList.remove('on');
-  document.getElementById('ocr-btn-wrap').style.display = 'none';
-  document.getElementById('ocr-status').style.display = 'none';
 }
 
-// ── OCR용 고해상도 업스케일 (저장용 1600px 별도, OCR용 2000px) ──
-function upscaleForOCR(srcImg){
-  const MAX = 2000;
-  let w = srcImg.naturalWidth  || srcImg.width  || 1000;
-  let h = srcImg.naturalHeight || srcImg.height || 1000;
-  // 2000px 미만이면 업스케일, 초과면 2000px로 제한
-  if(w < MAX && h < MAX){
-    const factor = MAX / Math.max(w, h);
-    w = Math.round(w * factor);
-    h = Math.round(h * factor);
-  } else if(w > MAX || h > MAX){
-    if(w > h){ h = Math.round(h * MAX / w); w = MAX; }
-    else      { w = Math.round(w * MAX / h); h = MAX; }
-  }
-  const canvas = document.createElement('canvas');
-  canvas.width = w; canvas.height = h;
-  // imageSmoothingQuality 최고 품질로 업스케일
-  const ctx = canvas.getContext('2d');
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(srcImg, 0, 0, w, h);
-  return canvas.toDataURL('image/jpeg', 0.95);
-}
-
-// ── OCR 텍스트 인식 ──
-async function recognizeText(){
-  const img    = document.getElementById('sermon-photo-img');
-  const btn    = document.getElementById('ocr-btn');
-  const status = document.getElementById('ocr-status');
-  if(!img.src || img.src === window.location.href) return;
-
-  btn.disabled = true;
-  status.style.display = 'block';
-  status.style.color   = '';
-  status.textContent   = '이미지 준비 중...';
-
-  try {
-    // OCR 전용 2000px 고해상도 이미지 (전처리 없이 원본 색감 유지)
-    const ocrSrc = upscaleForOCR(img);
-
-    status.textContent = '인식 엔진 초기화 중...';
-    const result = await Tesseract.recognize(ocrSrc, 'kor+eng', {
-      tessedit_pageseg_mode: 3,  // PSM 3: 완전 자동 페이지 분할 (인쇄 문서에 적합)
-      tessedit_ocr_engine_mode: 1, // OEM 1: LSTM 전용 (최신 신경망)
-      logger: m => {
-        if(m.status === 'recognizing text'){
-          status.textContent = `글씨 인식 중... ${Math.round((m.progress||0)*100)}%`;
-        } else if(m.status.includes('loading') || m.status.includes('initializing')){
-          status.textContent = '인식 엔진 초기화 중...';
-        }
-      }
-    });
-
-    let text = (result.data.text || '').trim();
-
-    // 후처리: 연속된 줄바꿈 3개 이상 → 2개로, 단독 줄바꿈은 유지
-    text = text.replace(/\n{3,}/g, '\n\n');
-
-    if(text){
-      document.getElementById('sn-content').value = text;
-      status.textContent = '인쇄된 글씨는 비교적 정확하게, 손글씨는 부정확할 수 있어요.\n인식 결과를 확인하고 수정해주세요 ✏️';
-      status.style.color = '#1D9E75';
-    } else {
-      status.textContent = '텍스트를 인식하지 못했어요. 사진이 선명하고 글씨가 잘 보이는지 확인해주세요.';
-      status.style.color = '#e53935';
-    }
-  } catch(e) {
-    console.error('OCR error:', e);
-    status.textContent = '인식에 실패했어요. 다시 시도해주세요.';
-    status.style.color = '#e53935';
-  } finally {
-    btn.disabled = false;
-  }
-}
 
 // ── 사진 압축 → base64 변환 ──
 // 기본: 최대 1600px / 품질 0.85 (원본 색감 그대로)
