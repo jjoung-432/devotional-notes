@@ -593,64 +593,98 @@ img.emoji { width: 40px; height: 40px; vertical-align: middle; }
   display: flex; align-items: center; justify-content: center;
 }
 
-/* ── 말씀기록 사진+폼 레이아웃 ── */
-#pg-sermon { padding: 0; } /* .page padding 재정의 */
-
-.sermon-photo-panel {
-  display: none;
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  background: #111;
-  height: 42vh;
-  min-height: 180px;
-  overflow: hidden;
-  transition: height .3s ease;
+/* ── 말씀기록 사진 썸네일 ── */
+.sermon-thumb-wrap {
+  display: none; margin-bottom: 10px;
+  border-radius: var(--radius-sm); overflow: hidden;
+  position: relative; background: #111;
+  height: 80px; cursor: pointer;
 }
-.sermon-photo-panel.on  { display: block; }
-.sermon-photo-panel.collapsed { height: 18vh; min-height: 80px; }
+.sermon-thumb-wrap.on { display: block; }
+.sermon-thumb-img {
+  width: 100%; height: 100%; object-fit: cover;
+  display: block; user-select: none;
+}
+.sermon-thumb-overlay {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  gap: 10px;
+  background: rgba(0,0,0,0.28);
+}
+.sermon-thumb-overlay span {
+  color: white; font-size: 12px; font-weight: 700;
+  background: rgba(0,90,220,0.7); border-radius: 10px;
+  padding: 4px 10px;
+}
 
-.sermon-sticky-img {
+/* ── 사진+입력 포커스 모드 오버레이 ── */
+#sermon-focus {
+  display: none;
+  position: fixed; inset: 0; z-index: 8000;
+  background: white; flex-direction: column;
+}
+#sermon-focus.on { display: flex; }
+
+.sfm-topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; background: var(--purple); flex-shrink: 0;
+}
+.sfm-topbar-title { color: white; font-size: 14px; font-weight: 700; }
+.sfm-topbar-btns  { display: flex; gap: 8px; }
+.sfm-btn {
+  background: rgba(255,255,255,0.2); color: white;
+  border: none; border-radius: 10px; padding: 6px 14px;
+  font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit;
+}
+.sfm-btn:active { background: rgba(255,255,255,0.35); }
+.sfm-btn.done   { background: white; color: var(--purple); }
+
+.sfm-photo-area {
+  height: 50vh; flex-shrink: 0;
+  background: #111; position: relative; overflow: hidden;
+}
+.sfm-photo-img {
   width: 100%; height: 100%;
   object-fit: contain; display: block;
   touch-action: pinch-zoom; user-select: none;
 }
-.sermon-photo-bar {
-  position: absolute; bottom: 0; left: 0; right: 0;
+
+.sfm-divider {
+  height: 3px; flex-shrink: 0;
+  background: linear-gradient(to right, var(--purple), var(--purple-mid));
+}
+
+.sfm-field-area {
+  flex: 1; overflow-y: auto; padding: 14px 16px 16px;
+  display: flex; flex-direction: column;
+}
+.sfm-step-lbl {
+  font-size: 11px; font-weight: 700; color: var(--purple);
+  text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px;
+}
+.sfm-field-area textarea, .sfm-field-area input[type=text] {
+  flex: 1; min-height: 80px; font-size: 15px; line-height: 1.7;
+  border: 1.5px solid var(--purple-mid); border-radius: var(--radius-sm);
+  padding: 12px; background: var(--bg); font-family: inherit; color: var(--text);
+  resize: none;
+}
+.sfm-field-area textarea:focus, .sfm-field-area input[type=text]:focus {
+  outline: none; border-color: var(--purple);
+}
+.sfm-field-area input[type=text] { min-height: unset; flex: none; }
+.sfm-nav {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 6px 10px 8px; gap: 8px;
-  background: linear-gradient(to top, rgba(0,0,0,0.65), transparent);
+  margin-top: 12px; flex-shrink: 0;
 }
-.sermon-bar-btn {
-  background: rgba(255,255,255,0.18); color: white;
-  border: none; border-radius: 12px;
-  padding: 5px 12px; font-size: 12px; font-weight: 600;
-  cursor: pointer; font-family: inherit;
-  backdrop-filter: blur(4px);
-  transition: background .15s;
+.sfm-progress { font-size: 12px; color: var(--text2); font-weight: 600; }
+.sfm-nav-btns { display: flex; gap: 8px; }
+.sfm-nav-btn {
+  padding: 9px 16px; border-radius: var(--radius-sm);
+  font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit;
+  border: none;
 }
-.sermon-bar-btn:active { background: rgba(255,255,255,0.35); }
-
-.sermon-form-area  { padding: 16px 16px 0; }
-.sermon-notes-area { padding: 0 16px 24px; }
-
-/* 데스크탑: 2열 고정 레이아웃 */
-@media (min-width: 640px) {
-  #pg-sermon.has-photo {
-    display: grid;
-    grid-template-columns: 44% 56%;
-    align-items: start;
-    min-height: 100%;
-  }
-  #pg-sermon.has-photo .sermon-photo-panel {
-    grid-column: 1; grid-row: 1 / 3;
-    position: sticky; top: 0;
-    height: 100vh; max-height: 100vh; min-height: unset;
-  }
-  #pg-sermon.has-photo .sermon-photo-panel.collapsed { height: 50vh; }
-  #pg-sermon.has-photo .sermon-form-area  { grid-column: 2; grid-row: 1; padding: 16px 16px 0 12px; }
-  #pg-sermon.has-photo .sermon-notes-area { grid-column: 2; grid-row: 2; padding: 0 16px 24px 12px; }
-}
+.sfm-prev { background: var(--purple-light); color: var(--purple); }
+.sfm-next { background: var(--purple); color: white; }
 
 /* ── CALENDAR ── */
 .cal-month-stats {
@@ -965,69 +999,69 @@ img.emoji { width: 40px; height: 40px; vertical-align: middle; }
 
   <!-- 말씀기록 -->
   <div class="page" id="pg-sermon">
-
-    <!-- 파일 input (숨김) -->
     <input type="file" id="sermon-photo-input" accept="image/*"
       style="display:none" onchange="onSermonPhotoSelected(event)">
 
-    <!-- ① 사진 sticky 패널 -->
-    <div class="sermon-photo-panel" id="sermon-photo-panel">
-      <img class="sermon-sticky-img" id="sermon-photo-img" src="" alt="참고 사진">
-      <div class="sermon-photo-bar">
-        <div style="display:flex;gap:6px">
-          <button class="sermon-bar-btn" id="sermon-toggle-btn" onclick="toggleSermonPhoto()">작게 보기</button>
-          <button class="sermon-bar-btn" onclick="viewSermonPhoto(document.getElementById('sermon-photo-img').src)">⛶ 전체화면</button>
-        </div>
-        <button class="sermon-bar-btn" onclick="closeSermonPhoto()">✕ 닫기</button>
-      </div>
-    </div>
+    <div class="card">
+      <div class="sec-lbl">📝 말씀 기록하기</div>
 
-    <!-- ② 폼 영역 -->
-    <div class="sermon-form-area">
-      <div class="card">
-        <div class="sec-lbl">📝 말씀 기록하기</div>
-        <button class="btn-outline" style="margin-bottom:12px;margin-top:0"
+      <!-- 사진 썸네일 (첨부 후 표시) -->
+      <div class="sermon-thumb-wrap" id="sermon-thumb-wrap"
+           onclick="viewSermonPhoto(document.getElementById('sermon-photo-img').src)">
+        <img class="sermon-thumb-img" id="sermon-photo-img" src="" alt="참고 사진">
+        <div class="sermon-thumb-overlay">
+          <span>🔍 크게 보기</span>
+        </div>
+      </div>
+
+      <!-- 사진 첨부 / 포커스모드 버튼 -->
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <button class="btn-outline" style="flex:1;margin:0"
           onclick="document.getElementById('sermon-photo-input').click()">
-          📷 필기 사진 참고하기
+          📷 사진 첨부
         </button>
-        <div class="photo-hint" id="photo-hint">
-          사진을 보면서 아래 내용을 직접 입력해주세요 ✏️
-        </div>
-        <div class="sermon-form-grid">
-          <div>
-            <div class="field-lbl">날짜</div>
-            <input type="date" id="sn-date" style="width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;background:var(--bg);font-family:inherit;color:var(--text)">
-          </div>
-          <div>
-            <div class="field-lbl">설교자</div>
-            <input type="text" id="sn-preacher" placeholder="설교자 이름">
-          </div>
-        </div>
-        <div class="sermon-form-grid">
-          <div>
-            <div class="field-lbl">설교 제목</div>
-            <input type="text" id="sn-title" placeholder="오늘 들은 설교 제목">
-          </div>
-          <div>
-            <div class="field-lbl">성경 본문</div>
-            <input type="text" id="sn-ref" placeholder="예: 요한복음 3:16">
-          </div>
-        </div>
-        <div class="field-lbl">말씀 내용 / 은혜받은 내용</div>
-        <textarea id="sn-content" placeholder="말씀에서 받은 은혜, 깨달음을 적어보세요..." style="min-height:100px"></textarea>
-        <div class="field-lbl">적용할 점</div>
-        <textarea id="sn-apply" placeholder="이 말씀을 삶에 어떻게 적용할까요?" style="min-height:64px"></textarea>
-        <button class="btn-purple" onclick="saveSermonNote()">💾 기록 저장</button>
+        <button class="btn-outline" id="sfm-open-btn" style="flex:1;margin:0;display:none"
+          onclick="openSermonFocusMode()">
+          📖 사진 보면서 입력
+        </button>
       </div>
+      <button class="btn-outline" id="sermon-photo-remove-btn"
+        style="display:none;margin-bottom:10px;color:#e53935;border-color:#e53935;background:#fff5f5"
+        onclick="closeSermonPhoto()">
+        ✕ 사진 제거
+      </button>
+
+      <div class="sermon-form-grid">
+        <div>
+          <div class="field-lbl">날짜</div>
+          <input type="date" id="sn-date" style="width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;background:var(--bg);font-family:inherit;color:var(--text)">
+        </div>
+        <div>
+          <div class="field-lbl">설교자</div>
+          <input type="text" id="sn-preacher" placeholder="설교자 이름">
+        </div>
+      </div>
+      <div class="sermon-form-grid">
+        <div>
+          <div class="field-lbl">설교 제목</div>
+          <input type="text" id="sn-title" placeholder="오늘 들은 설교 제목">
+        </div>
+        <div>
+          <div class="field-lbl">성경 본문</div>
+          <input type="text" id="sn-ref" placeholder="예: 요한복음 3:16">
+        </div>
+      </div>
+      <div class="field-lbl">말씀 내용 / 은혜받은 내용</div>
+      <textarea id="sn-content" placeholder="말씀에서 받은 은혜, 깨달음을 적어보세요..." style="min-height:100px"></textarea>
+      <div class="field-lbl">적용할 점</div>
+      <textarea id="sn-apply" placeholder="이 말씀을 삶에 어떻게 적용할까요?" style="min-height:64px"></textarea>
+      <button class="btn-purple" onclick="saveSermonNote()">💾 기록 저장</button>
     </div>
 
-    <!-- ③ 기록 목록 -->
-    <div class="sermon-notes-area">
-      <div id="sermon-notes-empty" style="display:none;text-align:center;padding:24px 20px;color:var(--text2);font-size:12px">
-        아직 저장된 기록이 없어요 ✏️
-      </div>
-      <div class="card" id="sermon-notes-list" style="display:none"></div>
+    <div id="sermon-notes-empty" style="display:none;text-align:center;padding:24px 20px;color:var(--text2);font-size:12px">
+      아직 저장된 기록이 없어요 ✏️
     </div>
+    <div class="card" id="sermon-notes-list" style="display:none"></div>
   </div>
 
 </div><!-- /scroll-wrap -->
@@ -1060,6 +1094,33 @@ img.emoji { width: 40px; height: 40px; vertical-align: middle; }
 </div>
 
 </div><!-- /app -->
+
+<!-- ── 사진+입력 포커스 모드 ── -->
+<div id="sermon-focus">
+  <div class="sfm-topbar">
+    <div class="sfm-topbar-title">📖 사진 보면서 입력</div>
+    <div class="sfm-topbar-btns">
+      <button class="sfm-btn" onclick="viewSermonPhoto(document.getElementById('sfm-photo-img').src)">⛶ 확대</button>
+      <button class="sfm-btn done" onclick="closeSermonFocusMode()">완료 ✓</button>
+    </div>
+  </div>
+  <div class="sfm-photo-area">
+    <img class="sfm-photo-img" id="sfm-photo-img" src="" alt="참고 사진">
+  </div>
+  <div class="sfm-divider"></div>
+  <div class="sfm-field-area">
+    <div class="sfm-step-lbl" id="sfm-step-lbl"></div>
+    <input  type="text" id="sfm-input"    style="display:none" placeholder="">
+    <textarea              id="sfm-textarea" style="display:none" placeholder=""></textarea>
+    <div class="sfm-nav">
+      <span class="sfm-progress" id="sfm-progress"></span>
+      <div class="sfm-nav-btns">
+        <button class="sfm-nav-btn sfm-prev" id="sfm-prev-btn" onclick="sermonFocusMove(-1)">◀ 이전</button>
+        <button class="sfm-nav-btn sfm-next" id="sfm-next-btn" onclick="sermonFocusMove(1)">다음 ▶</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- 이미지 전체보기 뷰어 -->
 <div id="img-viewer">
@@ -1425,43 +1486,89 @@ function renderSavedVerses(){
 }
 
 // ── 말씀기록 사진 참고 ──
-let _sermonPhotoExpanded = true; // true=크게(42vh), false=작게(18vh)
-
 function onSermonPhotoSelected(event){
   const file = event.target.files[0];
   if(!file) return;
   currentPhotoFile = file;
   const url = URL.createObjectURL(file);
-  const img   = document.getElementById('sermon-photo-img');
-  const panel = document.getElementById('sermon-photo-panel');
-  const page  = document.getElementById('pg-sermon');
-  img.src = url;
-  panel.classList.remove('collapsed');
-  panel.classList.add('on');
-  page.classList.add('has-photo');
-  _sermonPhotoExpanded = true;
-  document.getElementById('sermon-toggle-btn').textContent = '작게 보기';
-  document.getElementById('photo-hint').classList.add('on');
+  document.getElementById('sermon-photo-img').src = url;
+  document.getElementById('sermon-thumb-wrap').classList.add('on');
+  document.getElementById('sfm-open-btn').style.display = '';
+  document.getElementById('sermon-photo-remove-btn').style.display = '';
 }
 
 function closeSermonPhoto(){
-  const img   = document.getElementById('sermon-photo-img');
-  const panel = document.getElementById('sermon-photo-panel');
+  const img = document.getElementById('sermon-photo-img');
   URL.revokeObjectURL(img.src);
   img.src = '';
-  panel.classList.remove('on', 'collapsed');
-  document.getElementById('pg-sermon').classList.remove('has-photo');
   currentPhotoFile = null;
   document.getElementById('sermon-photo-input').value = '';
-  document.getElementById('photo-hint').classList.remove('on');
+  document.getElementById('sermon-thumb-wrap').classList.remove('on');
+  document.getElementById('sfm-open-btn').style.display = 'none';
+  document.getElementById('sermon-photo-remove-btn').style.display = 'none';
 }
 
-function toggleSermonPhoto(){
-  const panel = document.getElementById('sermon-photo-panel');
-  const btn   = document.getElementById('sermon-toggle-btn');
-  _sermonPhotoExpanded = !_sermonPhotoExpanded;
-  panel.classList.toggle('collapsed', !_sermonPhotoExpanded);
-  btn.textContent = _sermonPhotoExpanded ? '작게 보기' : '크게 보기';
+// ── 사진+입력 포커스 모드 ──
+const SFM_STEPS = [
+  { label:'설교 제목',               id:'sn-title',   type:'input',    ph:'오늘 들은 설교 제목' },
+  { label:'성경 본문',               id:'sn-ref',     type:'input',    ph:'예: 요한복음 3:16' },
+  { label:'말씀 내용 / 은혜받은 내용', id:'sn-content', type:'textarea', ph:'말씀에서 받은 은혜, 깨달음을 적어보세요...' },
+  { label:'적용할 점',               id:'sn-apply',   type:'textarea', ph:'이 말씀을 삶에 어떻게 적용할까요?' },
+];
+let _sfmStep = 0;
+
+function openSermonFocusMode(){
+  const src = document.getElementById('sermon-photo-img').src;
+  if(!src) return;
+  document.getElementById('sfm-photo-img').src = src;
+  _sfmStep = 0;
+  sfmRender();
+  document.getElementById('sermon-focus').classList.add('on');
+}
+
+function closeSermonFocusMode(){
+  sfmSaveCurrent();
+  document.getElementById('sermon-focus').classList.remove('on');
+}
+
+function sfmRender(){
+  const step = SFM_STEPS[_sfmStep];
+  const inp = document.getElementById('sfm-input');
+  const ta  = document.getElementById('sfm-textarea');
+  document.getElementById('sfm-step-lbl').textContent = step.label;
+  document.getElementById('sfm-progress').textContent = `${_sfmStep + 1} / ${SFM_STEPS.length}`;
+  document.getElementById('sfm-prev-btn').style.opacity = _sfmStep === 0 ? '0.3' : '1';
+  document.getElementById('sfm-next-btn').textContent =
+    _sfmStep === SFM_STEPS.length - 1 ? '완료 ✓' : '다음 ▶';
+
+  if(step.type === 'input'){
+    inp.style.display = ''; ta.style.display = 'none';
+    inp.placeholder = step.ph;
+    inp.value = document.getElementById(step.id).value;
+    setTimeout(() => inp.focus(), 80);
+  } else {
+    ta.style.display = ''; inp.style.display = 'none';
+    ta.placeholder = step.ph;
+    ta.value = document.getElementById(step.id).value;
+    setTimeout(() => { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }, 80);
+  }
+}
+
+function sfmSaveCurrent(){
+  const step = SFM_STEPS[_sfmStep];
+  const val = step.type === 'input'
+    ? document.getElementById('sfm-input').value
+    : document.getElementById('sfm-textarea').value;
+  document.getElementById(step.id).value = val;
+}
+
+function sermonFocusMove(delta){
+  sfmSaveCurrent();
+  const next = _sfmStep + delta;
+  if(next < 0) return;
+  if(next >= SFM_STEPS.length){ closeSermonFocusMode(); return; }
+  _sfmStep = next;
+  sfmRender();
 }
 
 
