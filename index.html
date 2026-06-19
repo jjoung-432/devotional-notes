@@ -599,6 +599,7 @@ img.emoji { width: 40px; height: 40px; vertical-align: middle; }
   border-radius: var(--radius-sm); overflow: hidden;
   position: relative; background: #111;
   height: 80px; cursor: pointer;
+  touch-action: manipulation; /* 300ms 탭 딜레이 제거 */
 }
 .sermon-thumb-wrap.on { display: block; }
 .sermon-thumb-img {
@@ -610,6 +611,7 @@ img.emoji { width: 40px; height: 40px; vertical-align: middle; }
   display: flex; align-items: center; justify-content: center;
   gap: 10px;
   background: rgba(0,0,0,0.28);
+  touch-action: manipulation; /* 300ms 탭 딜레이 제거 */
 }
 .sermon-thumb-overlay span {
   color: white; font-size: 12px; font-weight: 700;
@@ -622,6 +624,7 @@ img.emoji { width: 40px; height: 40px; vertical-align: middle; }
   display: none;
   position: fixed; inset: 0; z-index: 8000;
   background: white; flex-direction: column;
+  touch-action: manipulation; /* 전체 오버레이 300ms 딜레이 제거 */
 }
 #sermon-focus.on { display: flex; }
 
@@ -629,6 +632,7 @@ img.emoji { width: 40px; height: 40px; vertical-align: middle; }
   display: flex; align-items: center; justify-content: space-between;
   padding: 10px 14px; background: var(--purple); flex-shrink: 0;
   position: relative; z-index: 10; pointer-events: all;
+  touch-action: manipulation; /* 탭 딜레이 제거 */
   /* iOS safe area */
   padding-top: max(10px, env(safe-area-inset-top));
 }
@@ -651,7 +655,8 @@ img.emoji { width: 40px; height: 40px; vertical-align: middle; }
 .sfm-photo-img {
   width: 100%; height: 100%;
   object-fit: contain; display: block;
-  touch-action: pinch-zoom; user-select: none;
+  touch-action: pinch-zoom; /* 핀치줌만 허용 — manipulation 아닌 pinch-zoom 유지 */
+  user-select: none;
 }
 
 .sfm-divider {
@@ -662,6 +667,7 @@ img.emoji { width: 40px; height: 40px; vertical-align: middle; }
 .sfm-field-area {
   flex: 1; overflow-y: auto; padding: 14px 16px 16px;
   display: flex; flex-direction: column;
+  touch-action: manipulation; /* 탭 딜레이 제거, 스크롤은 허용 */
   /* iOS 키보드가 올라와도 레이아웃 안정 유지 */
   min-height: 0;
 }
