@@ -624,15 +624,15 @@ img.emoji { width: 40px; height: 40px; vertical-align: middle; }
   display: none;
   position: fixed; inset: 0; z-index: 8000;
   background: white; flex-direction: column;
-  touch-action: manipulation; /* 전체 오버레이 300ms 딜레이 제거 */
+  /* touch-action은 각 영역별로 지정 — 여기선 미설정 */
 }
 #sermon-focus.on { display: flex; }
 
 .sfm-topbar {
   display: flex; align-items: center; justify-content: space-between;
   padding: 10px 14px; background: var(--purple); flex-shrink: 0;
-  position: relative; z-index: 10; pointer-events: all;
-  touch-action: manipulation; /* 탭 딜레이 제거 */
+  position: relative; z-index: 100; pointer-events: all;
+  touch-action: manipulation; /* 버튼 탭 딜레이 제거 */
   /* iOS safe area */
   padding-top: max(10px, env(safe-area-inset-top));
 }
@@ -651,12 +651,15 @@ img.emoji { width: 40px; height: 40px; vertical-align: middle; }
 .sfm-photo-area {
   height: 50vh; flex-shrink: 0;
   background: #111; position: relative; overflow: hidden;
+  touch-action: none; /* JS 커스텀 핀치줌 처리 — 브라우저 페이지 줌 차단 */
 }
 .sfm-photo-img {
   width: 100%; height: 100%;
   object-fit: contain; display: block;
-  touch-action: pinch-zoom; /* 핀치줌만 허용 — manipulation 아닌 pinch-zoom 유지 */
+  touch-action: none; /* JS가 직접 처리 */
   user-select: none;
+  transform-origin: center center;
+  will-change: transform;
 }
 
 .sfm-divider {
@@ -1546,19 +1549,45 @@ const SFM_STEPS = [
 ];
 let _sfmStep = 0;
 
+// SFM 사진 영역 커스텀 핀치줌/팬 상태
+const _sfm = {
+  scale:1, tx:0, ty:0,
+  pinchDist:0, pinchScale:1, pinchTx:0, pinchTy:0, midX:0, midY:0,
+  isPanning:false, panX:0, panY:0, panTx:0, panTy:0,
+  lastTap:0
+};
+
+function sfmPhotoApply(animate){
+  const img = document.getElementById('sfm-photo-img');
+  if(!img) return;
+  img.style.transition = animate ? 'transform .2s ease' : 'none';
+  img.style.transform = `translate(${_sfm.tx}px,${_sfm.ty}px) scale(${_sfm.scale})`;
+}
+
+function sfmPhotoReset(){
+  _sfm.scale=1; _sfm.tx=0; _sfm.ty=0;
+  _sfm.isPanning=false; _sfm.pinchDist=0;
+  sfmPhotoApply(true);
+}
+
 function openSermonFocusMode(){
   const src = document.getElementById('sermon-photo-img').src;
   if(!src || (!src.startsWith('blob:') && !src.startsWith('data:'))) return;
-  document.getElementById('sfm-photo-img').src = src;
+  // 사진 설정 + 줌 상태 초기화
+  const img = document.getElementById('sfm-photo-img');
+  img.src = src;
+  img.style.transition = 'none';
+  img.style.transform = 'translate(0,0) scale(1)';
+  Object.assign(_sfm, {scale:1,tx:0,ty:0,isPanning:false,pinchDist:0,lastTap:0});
   _sfmStep = 0;
-  sfmRender(false); // 포커스 없이 렌더 (focus는 키보드 안 띄움)
+  sfmRender(false);
   document.getElementById('sermon-focus').classList.add('on');
 }
 
 function closeSermonFocusMode(){
   try { sfmSaveCurrent(); } catch(e){ console.warn('sfmSaveCurrent:', e); }
-  // 키보드 내리기
   document.activeElement && document.activeElement.blur();
+  sfmPhotoReset();
   document.getElementById('sermon-focus').classList.remove('on');
 }
 
@@ -1795,6 +1824,89 @@ document.addEventListener('DOMContentLoaded', () => {
   viewer.addEventListener('click', e => {
     if(e.target === viewer && _iv.scale <= 1) closeImgViewer();
   });
+
+  /* ══ SFM 사진 영역 커스텀 핀치줌 + 더블탭 + 팬 ══
+     #img-viewer 핸들러와 동일 로직, _sfm 상태 사용 */
+  const sfmArea = document.querySelector('.sfm-photo-area');
+  if(sfmArea){
+    sfmArea.addEventListener('touchstart', e => {
+      e.preventDefault(); // 페이지 스크롤/줌 차단
+      if(e.touches.length === 1){
+        const t   = e.touches[0];
+        const now = Date.now();
+        if(now - _sfm.lastTap < 280){
+          // 더블탭: 2.5× ↔ 1× 토글
+          const area = sfmArea.getBoundingClientRect();
+          if(_sfm.scale > 1){ sfmPhotoReset(); }
+          else {
+            const cx = t.clientX - area.left;
+            const cy = t.clientY - area.top;
+            const aW = area.width, aH = area.height;
+            const ns = 2.5, r = ns / _sfm.scale;
+            _sfm.tx = (cx - aW/2) * (1-r) + _sfm.tx * r;
+            _sfm.ty = (cy - aH/2) * (1-r) + _sfm.ty * r;
+            _sfm.scale = ns;
+            sfmPhotoApply(true);
+          }
+        } else {
+          _sfm.isPanning = true;
+          _sfm.panX = t.clientX; _sfm.panY = t.clientY;
+          _sfm.panTx = _sfm.tx; _sfm.panTy = _sfm.ty;
+        }
+        _sfm.lastTap = now;
+
+      } else if(e.touches.length === 2){
+        _sfm.isPanning = false;
+        const t1 = e.touches[0], t2 = e.touches[1];
+        _sfm.pinchDist  = Math.hypot(t2.clientX-t1.clientX, t2.clientY-t1.clientY);
+        _sfm.pinchScale = _sfm.scale;
+        _sfm.pinchTx    = _sfm.tx;
+        _sfm.pinchTy    = _sfm.ty;
+        _sfm.midX = (t1.clientX + t2.clientX) / 2;
+        _sfm.midY = (t1.clientY + t2.clientY) / 2;
+      }
+    }, { passive:false });
+
+    sfmArea.addEventListener('touchmove', e => {
+      e.preventDefault();
+      if(e.touches.length === 2){
+        const t1 = e.touches[0], t2 = e.touches[1];
+        const dist = Math.hypot(t2.clientX-t1.clientX, t2.clientY-t1.clientY);
+        if(_sfm.pinchDist === 0) return;
+        const area = sfmArea.getBoundingClientRect();
+        const ns   = Math.min(5, Math.max(1, _sfm.pinchScale * dist / _sfm.pinchDist));
+        const r    = ns / _sfm.pinchScale;
+        const aW = area.width, aH = area.height;
+        _sfm.scale = ns;
+        _sfm.tx = (_sfm.midX - area.left - aW/2) * (1-r) + _sfm.pinchTx * r;
+        _sfm.ty = (_sfm.midY - area.top  - aH/2) * (1-r) + _sfm.pinchTy * r;
+        if(_sfm.scale <= 1){ _sfm.scale=1; _sfm.tx=0; _sfm.ty=0; }
+        sfmPhotoApply(false);
+
+      } else if(e.touches.length === 1 && _sfm.isPanning && _sfm.scale > 1){
+        const t = e.touches[0];
+        _sfm.tx = _sfm.panTx + (t.clientX - _sfm.panX);
+        _sfm.ty = _sfm.panTy + (t.clientY - _sfm.panY);
+        sfmPhotoApply(false);
+      }
+    }, { passive:false });
+
+    sfmArea.addEventListener('touchend', e => {
+      e.preventDefault();
+      if(e.touches.length < 2) _sfm.isPanning = false;
+      if(e.touches.length === 1){
+        const t = e.touches[0];
+        _sfm.isPanning = true;
+        _sfm.panX = t.clientX; _sfm.panY = t.clientY;
+        _sfm.panTx = _sfm.tx; _sfm.panTy = _sfm.ty;
+      }
+    }, { passive:false });
+
+    // 더블탭 줌 아웃 버튼 (배경 탭 — scale=1 상태)
+    sfmArea.addEventListener('click', e => {
+      if(e.target === sfmArea && _sfm.scale <= 1) sfmPhotoReset();
+    });
+  }
 });
 
 // ── 설교 기록 ──
